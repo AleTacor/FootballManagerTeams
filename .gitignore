@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# Screenshots of the game stay local (they're used by `npm run test:images`)
+ScreenShots/
+src/test/fixtures/

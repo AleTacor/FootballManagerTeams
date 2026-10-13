@@ -1,0 +1,118 @@
+/* Design tokens — the only place raw colours and sizes live. See the ui-design skill. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #0f1419;
+  --surface: #161d24;
+  --surface-2: #1e2730;
+  --surface-3: #26313c;
+  --border: #2a3540;
+  --text: #e6edf3;
+  --text-muted: #9aa7b4;
+  --accent: #3fb68b;
+  --accent-text: #06140e;
+  --accent-soft: rgb(63 182 139 / 0.16);
+  --danger: #e5534b;
+  --danger-soft: rgb(229 83 75 / 0.14);
+  --warning: #d4a72c;
+  --warning-soft: rgb(212 167 44 / 0.16);
+  --info: #4a9eda;
+  --overlay: rgb(5 8 11 / 0.6);
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+
+  /* position groups */
+  --pos-gk: #d4a72c;
+  --pos-def: #4a9eda;
+  --pos-mid: #3fb68b;
+  --pos-att: #e5534b;
+
+  /* FM position familiarity */
+  --fam-natural: #22c55e;
+  --fam-accomplished: #a3e635;
+  --fam-competent: #facc15;
+  --fam-unconvincing: #fb923c;
+  --fam-awkward: #f2683c;
+  --fam-ineffectual: #e5534b;
+  --fam-unknown: #8b98a5;
+
+  /* pitch */
+  --pitch-a: #1d6b45;
+  --pitch-b: #1a6140;
+  --pitch-line: rgb(255 255 255 / 0.35);
+  --token-bg: #0f1a24;
+  --token-text: #f3f6f9;
+  --token-label-bg: rgb(8 14 20 / 0.82);
+  --token-label-text: #f3f6f9;
+  --slot-empty: rgb(255 255 255 / 0.22);
+  --slot-target: rgb(255 255 255 / 0.9);
+
+  /* spacing (4px scale) */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s6: 24px;
+  --s8: 32px;
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  /* sizes */
+  --token-size: 42px;
+  --dot-size: 10px;
+  --control-h: 36px;
+  --header-h: 56px;
+  --panel-w: 400px;
+
+  /* type */
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
+  /* motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --fast: 140ms;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef1f4;
+  --surface-3: #e2e7ec;
+  --border: #d5dce3;
+  --text: #15202b;
+  --text-muted: #56636f;
+  --accent: #1f8a64;
+  --accent-text: #ffffff;
+  --accent-soft: rgb(31 138 100 / 0.12);
+  --danger: #c93a32;
+  --danger-soft: rgb(201 58 50 / 0.1);
+  --warning: #a77d0b;
+  --warning-soft: rgb(167 125 11 / 0.12);
+  --info: #2a76b3;
+  --overlay: rgb(20 30 40 / 0.35);
+  --shadow: 0 8px 28px rgb(20 30 40 / 0.18);
+  --pos-gk: #a77d0b;
+  --pos-def: #2a76b3;
+  --pos-mid: #1f8a64;
+  --pos-att: #c93a32;
+  --fam-natural: #16a34a;
+  --fam-accomplished: #65a30d;
+  --fam-competent: #ca8a04;
+  --fam-unconvincing: #ea7a16;
+  --fam-awkward: #dc5a26;
+  --fam-ineffectual: #c93a32;
+  --fam-unknown: #7a8793;
+  --pitch-a: #2f8a5b;
+  --pitch-b: #2b8155;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --token-size: 38px;
+  }
+}
