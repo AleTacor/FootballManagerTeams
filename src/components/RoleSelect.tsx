@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CUSTOM_PREFIX, roleName, rolesFor } from '../domain/roles';
 import type { Phase, PosCode } from '../domain/types';
 import { useI18n } from '../i18n/I18n';
@@ -16,11 +16,13 @@ export function RoleSelect({
   const [editing, setEditing] = useState(isCustom);
   const [text, setText] = useState(isCustom ? value!.slice(CUSTOM_PREFIX.length) : '');
 
-  useEffect(() => {
-    const c = !!value?.startsWith(CUSTOM_PREFIX);
-    setEditing(c);
-    setText(c ? value!.slice(CUSTOM_PREFIX.length) : '');
-  }, [value]);
+  // Follow outside changes of the role (undo, another slot): adjusted during render, no effect.
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
+    setEditing(isCustom);
+    setText(isCustom ? value!.slice(CUSTOM_PREFIX.length) : '');
+  }
 
   const selectValue = editing ? CUSTOM : value && options.includes(value) ? value : '';
 

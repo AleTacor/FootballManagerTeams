@@ -3,6 +3,7 @@ import type { StringKey } from '../i18n/strings';
 import { useI18n } from '../i18n/I18n';
 import type { ScreenshotResult } from '../screenshot/read';
 import { Icon } from './Icon';
+import { useLatest } from './useLatest';
 
 type Status = { kind: 'idle' } | { kind: 'reading' } | { kind: 'done' | 'error'; msgs: StringKey[] };
 
@@ -22,8 +23,7 @@ export function ScreenshotFill({ initial, onResult }: { initial?: Blob; onResult
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [over, setOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const resultRef = useRef(onResult);
-  resultRef.current = onResult;
+  const resultRef = useLatest(onResult);
   const runId = useRef(0);
 
   const read = async (blob: Blob | null) => {
@@ -52,8 +52,7 @@ export function ScreenshotFill({ initial, onResult }: { initial?: Blob; onResult
       if (id === runId.current) setStatus({ kind: 'error', msgs: ['shotFailed'] });
     }
   };
-  const readRef = useRef(read);
-  readRef.current = read;
+  const readRef = useLatest(read);
 
   // Ctrl/Cmd+V with an image anywhere in the dialog; text pastes into inputs are left alone.
   useEffect(() => {
@@ -65,7 +64,7 @@ export function ScreenshotFill({ initial, onResult }: { initial?: Blob; onResult
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, []);
+  }, [readRef]);
 
   // An image pasted on the main screen opens the editor with it. Runs once, even in StrictMode.
   const startedRef = useRef(false);
@@ -74,7 +73,7 @@ export function ScreenshotFill({ initial, onResult }: { initial?: Blob; onResult
       startedRef.current = true;
       readRef.current(initial);
     }
-  }, [initial]);
+  }, [initial, readRef]);
 
   const pasteFromClipboard = async () => {
     try {

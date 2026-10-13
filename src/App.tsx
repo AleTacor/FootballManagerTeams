@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { DndProvider, useDnd, type DragPayload } from './components/dnd';
 import { Header } from './components/Header';
 import { Icon } from './components/Icon';
-import { Pitch, shortName } from './components/Pitch';
+import { shortName } from './components/names';
+import { Pitch } from './components/Pitch';
 import { PlayerEditor } from './components/PlayerEditor';
 import { SlotPanel } from './components/SlotPanel';
 import { SquadList } from './components/SquadList';
@@ -117,8 +118,12 @@ function Main() {
     return () => window.removeEventListener('paste', onPaste);
   }, []);
 
-  // Close panel if its context disappears (team switch).
-  useEffect(() => setPanelSlot(null), [team.id]);
+  // Close the panel when the team changes (adjusted during render, no effect).
+  const [panelTeam, setPanelTeam] = useState(team.id);
+  if (panelTeam !== team.id) {
+    setPanelTeam(team.id);
+    setPanelSlot(null);
+  }
 
   const placingPlayer = placing ? team.players.find((p) => p.id === placing) : undefined;
   const count = startersCount(team, phase);

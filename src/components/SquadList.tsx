@@ -7,7 +7,7 @@ import { useI18n } from '../i18n/I18n';
 import { useStore } from '../state/store';
 import { useDnd } from './dnd';
 import { Icon } from './Icon';
-import { shortName } from './Pitch';
+import { shortName } from './names';
 
 type Filter = 'all' | 'starters' | 'subs' | 'none';
 type SortKey = 'name' | Phase;

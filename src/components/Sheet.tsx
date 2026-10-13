@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useI18n } from '../i18n/I18n';
 import { Icon } from './Icon';
+import { useLatest } from './useLatest';
 
 /**
  * Side panel on desktop, bottom sheet on phones. Non-modal: the pitch stays usable
@@ -13,8 +14,7 @@ export function Sheet({
 }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
   const { t } = useI18n();
   const ref = useRef<HTMLElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const closeRef = useLatest(onClose);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,7 +32,7 @@ export function Sheet({
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('click', onClick);
     };
-  }, []);
+  }, [closeRef]);
 
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('.sheet-close')?.focus({ preventScroll: true });

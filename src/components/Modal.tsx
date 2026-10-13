@@ -1,14 +1,14 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useI18n } from '../i18n/I18n';
 import { Icon } from './Icon';
+import { useLatest } from './useLatest';
 
 export function Modal({
   title, onClose, children, footer, size = 'md',
 }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: 'sm' | 'md' }) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const closeRef = useLatest(onClose);
 
   // Runs once per open: focus handling must not re-run on every parent render.
   useEffect(() => {
@@ -44,7 +44,7 @@ export function Modal({
       window.removeEventListener('keydown', onKey, true);
       prevFocus?.focus?.();
     };
-  }, []);
+  }, [closeRef]);
 
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>

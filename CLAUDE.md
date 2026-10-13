@@ -21,13 +21,20 @@ npm install
 npm run dev        # Vite dev server, http://localhost:5173
 npm run build      # production build to dist/ (vite build, no type check)
 npm run typecheck  # tsc --noEmit — run this after code changes
+npm run lint       # ESLint (eslint.config.js); lint:fix applies the safe fixes
+npm run check      # lint + typecheck + test + test:images (what the pre-commit hook runs)
 npm test           # Vitest unit tests (run once); no images needed
 npm run test:images # screenshot/OCR tests on local images in src/test/fixtures/ (git-ignored)
 npm run test:watch # Vitest in watch mode
 npm run preview    # serve the production build
 ```
 
-After any code change, run `npm run typecheck` and `npm test`; both must pass. After changing
+After any code change, run `npm run typecheck`, `npm run lint` and `npm test`; all must pass
+(lint with no errors or warnings).
+
+**Pre-commit hook**: `.githooks/pre-commit` runs `lint`, `typecheck`, `test` and `test:images`
+and aborts the commit if any fails. `npm install` enables it (`prepare` sets
+`core.hooksPath`). Don't bypass it with `--no-verify`; fix the failure instead. After changing
 `src/screenshot/`, also run `npm run test:images` (it skips cases whose image isn't there).
 
 ## Tests
@@ -140,7 +147,10 @@ src/
 
 ## Gotchas
 
-- `Modal`/`Sheet`/popovers keep `onClose` in a ref and set up focus and listeners **once**.
+- `Modal`/`Sheet`/popovers keep `onClose` in a ref (`useLatest()`, `components/useLatest.ts`)
+  and set up focus and listeners **once**. Don't write `ref.current = x` during render (the
+  `react-hooks/refs` lint rule); reset state on prop changes during render, not in an effect
+  (see `RoleSelect`, `Pitch`, `App`).
   Re-running focus logic on re-render caused an infinite blur→save→render loop. Inputs that
   save on blur must ignore unchanged values.
 - `store.tsx` keeps the latest data in a ref and records undo history outside React state

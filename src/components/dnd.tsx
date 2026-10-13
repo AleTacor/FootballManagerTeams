@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { SlotId } from '../domain/types';
+import { useLatest } from './useLatest';
 
 /**
  * Minimal pointer-based drag and drop (mouse, pen and touch) with no dependencies.
@@ -28,8 +29,7 @@ export function DndProvider({ children, onDrop }: { children: ReactNode; onDrop:
   const pending = useRef<{ x: number; y: number; payload: DragPayload; id: number } | null>(null);
   const active = useRef<DragPayload | null>(null);
   const over = useRef<SlotId | null>(null);
-  const dropRef = useRef(onDrop);
-  dropRef.current = onDrop;
+  const dropRef = useLatest(onDrop);
 
   const moveGhost = (x: number, y: number) => {
     if (ghost.current) ghost.current.style.transform = `translate(${x}px, ${y}px) translate(-50%, -120%)`;
@@ -100,7 +100,7 @@ export function DndProvider({ children, onDrop }: { children: ReactNode; onDrop:
       window.removeEventListener('pointercancel', end);
       window.removeEventListener('keydown', onKey);
     };
-  }, []);
+  }, [dropRef]);
 
   const startDrag = useCallback((e: ReactPointerEvent, payload: DragPayload) => {
     if (e.button !== 0) return;

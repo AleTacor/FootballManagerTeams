@@ -11,6 +11,8 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # production build in dist/
 npm run typecheck  # TypeScript check
+npm run lint       # ESLint
+npm run check      # everything the pre-commit hook runs (lint, types, all tests)
 npm test           # unit tests (Vitest)
 npm run test:images # screenshot-reading tests; needs local FM26 screenshots in
                     # src/test/fixtures/ (git-ignored, so not in the repository)

@@ -22,7 +22,7 @@ interface Props {
   onError: (e: LogicError) => void;
 }
 
-export function statusLabel(team: Team, playerId: string, phase: Phase, t: (k: StringKey) => string, pos: (c: PosCode) => string): string {
+function statusLabel(team: Team, playerId: string, phase: Phase, t: (k: StringKey) => string, pos: (c: PosCode) => string): string {
   const mine = team.assignments.filter((a) => a.playerId === playerId && a.phase === phase);
   const st = mine.find((a) => a.tier === 'starter');
   if (st) return `${t('starter')} · ${pos(SLOT_BY_ID[st.slot].pos)}`;

@@ -8,6 +8,8 @@ import { useStore } from '../state/store';
 import { useDnd } from './dnd';
 import { FamDot } from './FamDot';
 import { Icon } from './Icon';
+import { shortName } from './names';
+import { useLatest } from './useLatest';
 
 interface Props {
   phase: Phase;
@@ -17,17 +19,16 @@ interface Props {
   onSlotClick: (slot: SlotId) => void;
 }
 
-export function shortName(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? parts[parts.length - 1] : name;
-}
-
 export function Pitch({ phase, view, selectedSlot, targeting, onSlotClick }: Props) {
   const { t } = useI18n();
   const { dragging } = useDnd();
   const [plusSlot, setPlusSlot] = useState<SlotId | null>(null);
-
-  useEffect(() => setPlusSlot(null), [phase, view]);
+  // Close the +N popover when the phase or view changes (adjusted during render, no effect).
+  const [shownFor, setShownFor] = useState(`${phase}:${view}`);
+  if (shownFor !== `${phase}:${view}`) {
+    setShownFor(`${phase}:${view}`);
+    setPlusSlot(null);
+  }
 
   return (
     <div
@@ -170,8 +171,7 @@ function PlusPopover({ slot, phase, onClose, onManage }: { slot: SlotId; phase: 
   const { team, data, updateTeam } = useStore();
   const { t, pos } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const closeRef = useLatest(onClose);
   const def = SLOTS.find((s) => s.id === slot)!;
   const aux = auxOf(team, phase, slot);
   const list = [mainOf(team, phase, slot), ...aux].filter((a): a is Assignment => !!a);
@@ -179,7 +179,7 @@ function PlusPopover({ slot, phase, onClose, onManage }: { slot: SlotId; phase: 
   // The popover belongs to the +N pill: once the last auxiliary sub is gone, close it.
   useEffect(() => {
     if (!aux.length) closeRef.current();
-  }, [aux.length]);
+  }, [aux.length, closeRef]);
 
   const remove = (id: string) => {
     updateTeam((tm) => removeAssignment(tm, id));
@@ -199,7 +199,7 @@ function PlusPopover({ slot, phase, onClose, onManage }: { slot: SlotId; phase: 
       window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('keydown', onKey);
     };
-  }, [slot]);
+  }, [slot, closeRef]);
 
   const flipX = def.x > 60;
   const flipY = def.y > 60;
