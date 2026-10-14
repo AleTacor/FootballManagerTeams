@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  assignPlayer, auxOf, canPlay, familiarityAt, mainOf, promoteToMain, removeAssignment,
+  assignPlayer, auxOf, canPlay, familiarityAt, isStarter, mainOf, promoteToMain, removeAssignment,
   setRole, sortByFamiliarity, starterOf, type LogicError,
 } from '../domain/logic';
 import { SLOT_BY_ID } from '../domain/positions';
@@ -10,6 +10,7 @@ import { useI18n } from '../i18n/I18n';
 import { useStore } from '../state/store';
 import { FamDot } from './FamDot';
 import { Icon } from './Icon';
+import { ReplaceSelect } from './ReplaceSelect';
 import { RoleSelect } from './RoleSelect';
 import { Sheet } from './Sheet';
 import type { StringKey } from '../i18n/strings';
@@ -98,7 +99,8 @@ export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
                       value={a.role}
                       onChange={(role) => updateTeam((tm) => setRole(tm, a.id, role))}
                     />
-                    {a.tier === 'aux' && (
+                    {a.tier !== 'starter' && <ReplaceSelect assignment={a} />}
+                    {a.tier === 'aux' && !!starter && !isStarter(team, a.playerId, phase) && (
                       <button type="button" className="btn btn--ghost" onClick={() => updateTeam((tm) => promoteToMain(tm, a.id))}>
                         <Icon name="arrowUp" /> {t('makeMain')}
                       </button>
@@ -141,9 +143,17 @@ export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
           <ul className="candidate-list">
             {candidates.map((p) => {
               const st = statusLabel(team, p.id, phase, t, pos);
+              // A starter can't be a main sub: in the subs view he can only be added as aux.
+              const locked = tier === 'main' && isStarter(team, p.id, phase);
               return (
-                <li key={p.id} className="candidate">
-                  <button type="button" className="candidate-main" onClick={() => assign(p.id, tier)}>
+                <li key={p.id} className={`candidate${locked ? ' candidate--locked' : ''}`}>
+                  <button
+                    type="button"
+                    className="candidate-main"
+                    onClick={() => assign(p.id, tier)}
+                    disabled={locked}
+                    title={locked ? t('starterNotMain') : undefined}
+                  >
                     <FamDot level={familiarityAt(p, phase, slot)} />
                     <span className="grow min0">
                       <span className="truncate block">{p.name}</span>

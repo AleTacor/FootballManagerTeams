@@ -84,17 +84,17 @@ src/
     types.ts       # Player, Assignment, Team, AppData, Phase, Tier, PosCode, SlotId, Familiarity
     positions.ts   # 14 position codes, 24 pitch SLOTS (x/y %), familiarity order/rank
     roles.ts       # FM26 roles per position group and phase, ES/EN names + abbreviations
-    logic.ts       # lineup rules: assignPlayer, moveAssignment, promoteToMain, removePlayer…
+    logic.ts       # lineup rules: assignPlayer, moveAssignment, promoteToMain, removePlayer…, copyTeam (new ids)
   state/
-    store.tsx      # StoreProvider/useStore: data, updateTeam (records undo), setSettings, undo
+    store.tsx      # StoreProvider/useStore: data, updateTeam (records undo), setSettings, undo, redo
     storage.ts     # localStorage load/save, export, parseData (validates every import)
   i18n/
     strings.ts     # all UI strings (en is the source of keys; es must match), position and familiarity labels
     I18n.tsx       # useI18n(): t(key, vars), pos(code), fam(level), lang
   components/      # Pitch, SlotPanel, SquadList, PlayerEditor, PositionPicker, RoleSelect,
-                   # Header (teams, import/export, theme, language), Modal, Sheet, dnd, Icon
+                   # Header (teams, undo/redo, import/export, language), Modal, Sheet, dnd, Icon
   styles/
-    tokens.css     # design tokens for dark (default) and light themes
+    tokens.css     # design tokens (dark theme only)
     app.css        # component styles; uses tokens only
   screenshot/
     detect.ts      # pure pixel reading of an FM26 profile: positions pitch dots, name above the Actions button
@@ -109,23 +109,65 @@ src/
 - A `Player` has `positions: { ip: {PosCode: Familiarity}, oop: {...} }`. The player editor shows
   one map and saves it to both phases (FM26 positions don't depend on the phase); a player whose
   phases differ (older data, the example squad) opens merged with `mergePositions()`.
-- An `Assignment` = `{ playerId, phase: 'ip'|'oop', tier: 'starter'|'main'|'aux', slot: SlotId, role }`.
-  Lineups are just the list of assignments of the active team.
+- An `Assignment` = `{ playerId, phase: 'ip'|'oop', tier: 'starter'|'main'|'aux', slot: SlotId, role, replaces }`.
+  Lineups are just the list of assignments of the active team. `replaces` (subs only) is the
+  id of the starter the sub comes on for; `slot` is where the sub plays, which may be another
+  position. Null for starters.
 - Slots (`DCL`, `DCC`, `MCR`, `STC`…) are concrete pitch spots. Each maps to a `PosCode`
   (`DC`, `MC`, `ST`…), which is what familiarity and roles are keyed by.
 - `role` is a role id from `roles.ts`, `custom:<text>`, or `null`.
-- `AppData` = `{ version: 1, settings: {lang, theme}, teams[], activeTeamId }`, stored under
-  the `fm-teams:v1` key.
+- `Player.roles` (optional) remembers the player's last role per phase and slot
+  (`{ ip: { DCL: 'bpcb' } }`). Per slot, not per `PosCode`: MCC and MCR keep separate roles.
+- `AppData` = `{ version: 2, settings: {lang}, teams[], activeTeamId }`, stored under
+  the `fm-teams:v1` key. v1 had no `Player.roles`; importing it seeds them from the assignments.
+  Older data may carry `settings.theme`: it's ignored (the app is dark-only).
 
 ### Lineup rules (enforced in `logic.ts`, not in components)
 
 - At most **11 starters per phase**; a player starts in at most one slot per phase.
-- One **main sub** per slot and phase. A player can be main or aux sub in several slots, but
-  never a sub of the slot he starts in.
-- **Roles belong to the slot**: replacing or swapping players keeps the slot's role. Moving to
-  a different position clears the role only if it isn't valid there.
+- **Goalkeeper**: at most 10 outfield starters per phase (`outfieldFull` error): the 11th place
+  is the GK slot, which may stay empty. The goalkeeper is the same player in both phases
+  (`syncGoalkeeper`): putting someone in goal in one phase does it in the other (swapping with
+  whoever was there); nobody is ever put in goal automatically. Subs follow the GK rule
+  (`canReplace`): a sub in the GK slot replaces the starting goalkeeper, and only subs in the
+  GK slot do. The GK sub may be empty.
+- **Starts are linked across phases**: a player starts in both phases or in neither. A new
+  starter also starts in the other phase (same slot if free there, else the nearest free slot
+  of the same position, else one he can play, else the nearest: `partnerSlot`). Removing or
+  losing a start removes both.
+- **Main subs are linked the same way** (`linkMains`, run after every command): a player is
+  main sub in both phases or in neither. A new main sub gets a spot in the other phase,
+  preferring the slot where the same starter plays there (`mainPartnerSlot`); someone who
+  stops being main sub in a phase (removed, replaced, demoted to aux) stops in the other too.
+  Aux subs are not linked. `parseData` links older data with `linkLineup()`.
+- One **main sub** per slot and phase, and per starter. A player can be main or aux sub in
+  several slots, but never a sub of the slot he starts in. **A starter is never a main sub**
+  (`starterNotMain` error; becoming a starter drops all his main sub spots); he can be aux.
+  **New main subs only go where a starter plays**: adding a main sub (from the list, the panel
+  or the squad) to a slot with no starter adds him as an aux sub instead, and an aux sub there
+  can't be promoted. Moving an existing main sub (drag on the pitch) keeps him main, for the
+  same starter, wherever he goes.
+- **Sub links** (`normalizeLinks`, after every command): every main sub replaces a starter of
+  his phase (by default the starter of his slot; `defaultLink`). An aux sub's link is optional:
+  a new one replaces the starter of his slot, or nobody if the slot is empty (`auxLink`), and
+  the user can set it to nobody. A link that stops working (the starter left) falls back to
+  the same defaults. Moving a sub keeps his link (he only plays elsewhere);
+  `setReplaces()` changes it (for a main sub, in both phases). The UI only lets users change
+  an aux sub's link; a main sub's starter is fixed by where he's placed. When a starter is replaced,
+  his subs pass to the newcomer. If two main subs replace the same starter, the one just
+  placed or set wins and the other is relinked to a starter without a main sub, or to nobody.
+- **Role on arrival** (any placement, replacement, swap or move): the player's remembered role
+  for that slot and phase, else the FM26 default (`defaultRole()`, first role of the
+  position's list). A role never passes to another player (replacing, swapping) nor travels
+  with a player to another slot, even of the same position. Only an aux sub promoted to main
+  in the same slot keeps his role. Every role a player gets, or the
+  user sets, is remembered in `Player.roles`; clearing a role forgets it.
 - Replacing a starter in one phase **mirrors the substitution in the other phase**, if the
-  incoming player isn't already a starter there.
+  incoming player isn't already a starter there. Replacing a main sub mirrors it too: the
+  replaced player's main sub spot in the other phase covering the same starter, else the same
+  slot, else his only one (skipped if unclear or the incoming player starts in that slot; the
+  main sub link then fixes both players). The incoming player gets his own
+  remembered role in each slot (see Role on arrival).
 - Logic functions are pure and return a new `Team` (or `{ team, error }`). Components call them
   through `updateTeam(tm => …)` so every change gets an undo step.
 

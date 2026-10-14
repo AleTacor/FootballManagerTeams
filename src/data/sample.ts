@@ -1,4 +1,4 @@
-import { uid } from '../domain/logic';
+import { linkLineup, uid } from '../domain/logic';
 import type { Assignment, Familiarity, Phase, Player, PosCode, SlotId, Team } from '../domain/types';
 
 /** Fictional example squad (4-2-3-1 in possession, 4-4-2 out of possession). */
@@ -41,7 +41,7 @@ export function sampleTeam(name: string): Team {
   const byName = (n: string) => players.find((p) => p.name.startsWith(n))!.id;
   const assignments: Assignment[] = [];
   const add = (who: string, phase: Phase, tier: Assignment['tier'], slot: SlotId, role: string | null) =>
-    assignments.push({ id: uid(), playerId: byName(who), phase, tier, slot, role });
+    assignments.push({ id: uid(), playerId: byName(who), phase, tier, slot, role, replaces: null });
 
   // Starters, in possession (4-2-3-1)
   add('Iker', 'ip', 'starter', 'GK', 'bpgk');
@@ -83,7 +83,7 @@ export function sampleTeam(name: string): Team {
   add('Theo', 'ip', 'aux', 'GK', null);
   add('Pau', 'ip', 'aux', 'DL', null);
   add('Rafael', 'ip', 'aux', 'DMR', null);
-  add('Luka', 'ip', 'main', 'MCC', 'mp'); // a starter who is also a sub elsewhere
+  add('Luka', 'ip', 'aux', 'MCC', 'mp'); // a starter who is also an aux sub elsewhere
   add('Hugo', 'ip', 'aux', 'AMCC', null);
   add('Rodrigo', 'ip', 'aux', 'DCC', null);
   // Main subs (out of possession)
@@ -99,5 +99,6 @@ export function sampleTeam(name: string): Team {
   add('Marco', 'oop', 'main', 'STR', 'cf');
   add('Elias', 'oop', 'main', 'STL', null);
 
-  return { id: uid(), name, players, assignments };
+  // Each sub replaces the starter of his slot (or the nearest one): linkLineup fills the links.
+  return linkLineup({ id: uid(), name, players, assignments });
 }

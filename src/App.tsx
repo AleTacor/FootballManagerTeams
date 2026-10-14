@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { DndProvider, useDnd, type DragPayload } from './components/dnd';
+import { DndProvider, type DragPayload } from './components/dnd';
 import { Header } from './components/Header';
 import { Icon } from './components/Icon';
-import { shortName } from './components/names';
 import { Pitch } from './components/Pitch';
 import { PlayerEditor } from './components/PlayerEditor';
 import { SlotPanel } from './components/SlotPanel';
 import { SquadList } from './components/SquadList';
 import { sampleTeam } from './data/sample';
 import {
-  assignPlayer, isStarter, MAX_STARTERS, moveAssignment, startersCount, unplacedStarters, type LogicError,
+  assignPlayer, MAX_STARTERS, moveAssignment, startersCount, type LogicError,
 } from './domain/logic';
 import type { Phase, SlotId, Tier, View } from './domain/types';
 import { I18nProvider, useI18n } from './i18n/I18n';
@@ -26,9 +25,8 @@ export default function App() {
 function Localized() {
   const { data } = useStore();
   useEffect(() => {
-    document.documentElement.dataset.theme = data.settings.theme;
     document.documentElement.lang = data.settings.lang;
-  }, [data.settings.theme, data.settings.lang]);
+  }, [data.settings.lang]);
   return (
     <I18nProvider lang={data.settings.lang}>
       <Main />
@@ -40,7 +38,7 @@ type Toast = { id: number; msg: string; kind: 'ok' | 'error' };
 type Editor = { playerId: string | null; image?: Blob } | null;
 
 function Main() {
-  const { team, updateTeam, undo } = useStore();
+  const { team, updateTeam, undo, redo } = useStore();
   const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>('ip');
   const [view, setView] = useState<View>('starters');
@@ -90,20 +88,21 @@ function Main() {
     setPanelSlot((s) => (s === slot ? null : slot));
   };
 
-  // Global keys: Ctrl/Cmd+Z = undo, Esc = cancel placing.
+  // Global keys: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y = redo, Esc = cancel placing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      const typing = el.closest('input, select, textarea');
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing && !document.querySelector('.modal')) {
+      const typing = (e.target as Element).closest?.('input, select, textarea');
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && (key === 'z' || key === 'y') && !typing && !document.querySelector('.modal')) {
         e.preventDefault();
-        undo();
+        if (key === 'y' || e.shiftKey) redo();
+        else undo();
       }
       if (e.key === 'Escape' && placing) setPlacing(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, placing]);
+  }, [undo, redo, placing]);
 
   // Pasting an image on the main screen opens "Add player" and reads it as an FM26 screenshot.
   useEffect(() => {
@@ -127,9 +126,6 @@ function Main() {
 
   const placingPlayer = placing ? team.players.find((p) => p.id === placing) : undefined;
   const count = startersCount(team, phase);
-  const ipSet = new Set(team.assignments.filter((a) => a.phase === 'ip' && a.tier === 'starter').map((a) => a.playerId));
-  const oopSet = new Set(team.assignments.filter((a) => a.phase === 'oop' && a.tier === 'starter').map((a) => a.playerId));
-  const phasesDiffer = ipSet.size !== oopSet.size || [...ipSet].some((id) => !oopSet.has(id));
 
   return (
     <DndProvider onDrop={onDrop}>
@@ -155,7 +151,6 @@ function Main() {
               <span className={`stat-chip${count > MAX_STARTERS ? ' stat-chip--warn' : ''}`} title={t('startersCount')}>
                 {t('startersCount')} <strong className="num">{count}/{MAX_STARTERS}</strong>
               </span>
-              {phasesDiffer && count > 0 && <span className="stat-chip stat-chip--warn">{t('phasesDiffer')}</span>}
             </div>
 
             {team.players.length === 0 && (
@@ -186,13 +181,13 @@ function Main() {
               <Pitch phase={phase} view={view} selectedSlot={panelSlot} targeting={!!placing} onSlotClick={onSlotClick} />
             </div>
 
-            {view === 'starters' && <UnplacedTray phase={phase} onPick={(id) => setPlacing(id)} />}
             <p className="hint muted small">{t('dragHint')}</p>
           </section>
 
           <section className="squad-col" aria-label={t('squad')}>
             <SquadList
               phase={phase}
+              view={view}
               onAdd={() => setEditor({ playerId: null })}
               onEdit={(id) => setEditor({ playerId: id })}
               onPlace={(id) => {
@@ -224,36 +219,5 @@ function Main() {
         {editor && <PlayerEditor key={editor.playerId ?? 'new'} playerId={editor.playerId} image={editor.image} onClose={() => setEditor(null)} onError={onError} />}
       </div>
     </DndProvider>
-  );
-}
-
-function UnplacedTray({ phase, onPick }: { phase: Phase; onPick: (id: string) => void }) {
-  const { team } = useStore();
-  const { t } = useI18n();
-  const { startDrag } = useDnd();
-  const ids = unplacedStarters(team, phase).filter((id) => !isStarter(team, id, phase));
-  if (!ids.length) return null;
-  return (
-    <div className="tray">
-      <span className="tray-title small muted">{t('unplaced')}</span>
-      <div className="tray-items">
-        {ids.map((id) => {
-          const p = team.players.find((x) => x.id === id);
-          if (!p) return null;
-          return (
-            <button
-              key={id}
-              type="button"
-              className="chip"
-              style={{ touchAction: 'none' }}
-              onPointerDown={(e) => startDrag(e, { playerId: id, label: shortName(p.name) })}
-              onClick={() => onPick(id)}
-            >
-              <Icon name="crosshair" size={14} /> {p.name}
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }

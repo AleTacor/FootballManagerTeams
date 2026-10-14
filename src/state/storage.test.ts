@@ -28,18 +28,17 @@ afterEach(() => {
 
 function validData(): AppData {
   const team = sampleTeam('Test');
-  return { version: 1, settings: { lang: 'es', theme: 'light' }, teams: [team], activeTeamId: team.id };
+  return { version: 2, settings: { lang: 'es' }, teams: [team], activeTeamId: team.id };
 }
 
 describe('defaultData', () => {
   it('starts with one empty team that is active', () => {
     const d = defaultData();
-    expect(d.version).toBe(1);
+    expect(d.version).toBe(2);
     expect(d.teams).toHaveLength(1);
     expect(d.activeTeamId).toBe(d.teams[0].id);
     expect(d.teams[0].players).toEqual([]);
     expect(['es', 'en']).toContain(d.settings.lang);
-    expect(d.settings.theme).toBe('dark');
   });
 });
 
@@ -81,16 +80,55 @@ describe('parseData', () => {
     expect(parsed).not.toBeNull();
     const team = parsed!.teams[0];
     expect(parsed!.teams).toHaveLength(1);
-    expect(team.players).toEqual([{ id: 'p1', name: 'Ok', positions: { ip: { GK: 'natural' }, oop: {} } }]);
-    expect(team.assignments.map((a) => a.id)).toEqual(['a1', 'a6']);
-    expect(team.assignments[1].role).toBeNull();
+    // v1 → v2 migration: the player remembers the roles of his assignments.
+    expect(team.players).toEqual([
+      { id: 'p1', name: 'Ok', positions: { ip: { GK: 'natural' }, oop: {} }, roles: { ip: { GK: 'gk' }, oop: { GK: 'gk' } } },
+    ]);
+    // a6 was valid, but p1 starts (his lone start gets its out-of-possession partner), and a
+    // starter can't be a main sub.
+    expect(team.assignments).toMatchObject([
+      { id: 'a1', playerId: 'p1', phase: 'ip', tier: 'starter', slot: 'GK', replaces: null },
+      { playerId: 'p1', phase: 'oop', tier: 'starter', slot: 'GK' },
+    ]);
+    expect(team.assignments).toHaveLength(2);
+  });
+
+  it('keeps valid sub links and fixes invalid ones', () => {
+    const raw = JSON.parse(JSON.stringify(validData()));
+    const team = raw.teams[0];
+    const sub = team.assignments.find((a: { tier: string }) => a.tier === 'aux');
+    const main = team.assignments.find((a: { tier: string }) => a.tier === 'main');
+    // A link to someone who doesn't start falls back to the starter of the sub's slot (or nobody);
+    // an unknown player id means nobody.
+    sub.replaces = main.playerId;
+    const parsed = parseData(raw)!.teams[0];
+    const slotStarter = parsed.assignments.find((a) => a.phase === sub.phase && a.tier === 'starter' && a.slot === sub.slot);
+    expect(parsed.assignments.find((a) => a.id === sub.id)!.replaces).toBe(slotStarter?.playerId ?? null);
+    sub.replaces = 'ghost';
+    expect(parseData(raw)!.teams[0].assignments.find((a) => a.id === sub.id)!.replaces).toBeNull();
+    expect(parsed.assignments.find((a) => a.id === main.id)!.replaces).toBe(main.replaces);
+    expect(parsed.assignments.filter((a) => a.tier === 'starter').every((a) => a.replaces === null)).toBe(true);
+  });
+
+  it('keeps valid remembered roles and drops invalid ones', () => {
+    const data = validData();
+    const raw = JSON.parse(JSON.stringify(data));
+    raw.teams[0].players[0].roles = {
+      ip: { DCL: 'bpcb', STC: 'bpcb', DC: 'cb', GK: 42, MCR: 'custom:Regista' },
+      oop: 'nope',
+      mid: { DCL: 'cb' },
+    };
+    raw.teams[0].players[1].roles = { ip: { DCL: 'zzz' } };
+    const players = parseData(raw)!.teams[0].players;
+    expect(players[0].roles).toEqual({ ip: { DCL: 'bpcb', MCR: 'custom:Regista' } });
+    expect(players[1].roles).toBeUndefined();
   });
 
   it('fixes bad settings and an unknown active team', () => {
     const data = validData();
     const parsed = parseData({ ...data, settings: { lang: 'fr', theme: 'neon' }, activeTeamId: 'missing' })!;
     expect(['es', 'en']).toContain(parsed.settings.lang);
-    expect(parsed.settings.theme).toBe('dark');
+    expect(parsed.settings).not.toHaveProperty('theme'); // old setting, dropped
     expect(parsed.activeTeamId).toBe(data.teams[0].id);
   });
 

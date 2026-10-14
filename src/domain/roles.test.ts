@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { POS_CODES } from './positions';
-import { CUSTOM_PREFIX, ROLES, roleAbbr, roleFits, roleName, rolesFor } from './roles';
+import { CUSTOM_PREFIX, defaultRole, ROLES, roleAbbr, roleFits, roleName, rolesFor } from './roles';
 import type { Lang, Phase } from './types';
 
 const phases: Phase[] = ['ip', 'oop'];
@@ -43,6 +43,15 @@ describe('role catalogue', () => {
     expect(rolesFor('GK', 'ip')).not.toContain('sk');
     expect(rolesFor('DM', 'oop')).toContain('pdm');
     expect(rolesFor('ST', 'ip')).toContain('f9');
+  });
+});
+
+describe('default roles', () => {
+  it('uses the generic FM26 role of each position in both phases', () => {
+    const expected = { GK: 'gk', DC: 'cb', DL: 'fb', WBR: 'wb', DM: 'dm', MC: 'cm', MR: 'wm', AMC: 'am', AML: 'w', ST: 'cf' } as const;
+    for (const [pos, role] of Object.entries(expected)) {
+      for (const phase of phases) expect(defaultRole(pos as keyof typeof expected, phase), `${pos}/${phase}`).toBe(role);
+    }
   });
 });
 

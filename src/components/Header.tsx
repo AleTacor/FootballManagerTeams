@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { emptyTeam } from '../domain/logic';
+import { copyTeam, emptyTeam } from '../domain/logic';
 import type { AppData, Lang } from '../domain/types';
 import { useI18n } from '../i18n/I18n';
 import { exportData, parseData } from '../state/storage';
@@ -8,12 +8,12 @@ import { Icon } from './Icon';
 import { ConfirmDialog, Modal } from './Modal';
 
 export function Header({ onToast }: { onToast: (msg: string, kind?: 'ok' | 'error') => void }) {
-  const { data, setData, setSettings, undo, canUndo } = useStore();
+  const { data, setData, setSettings, undo, canUndo, redo, canRedo } = useStore();
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingImport, setPendingImport] = useState<AppData | null>(null);
   const [teamsOpen, setTeamsOpen] = useState(false);
-  const { lang, theme } = data.settings;
+  const { lang } = data.settings;
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
@@ -56,6 +56,9 @@ export function Header({ onToast }: { onToast: (msg: string, kind?: 'ok' | 'erro
         <button type="button" className="icon-btn" onClick={undo} disabled={!canUndo} title={`${t('undo')} (Ctrl+Z)`} aria-label={t('undo')}>
           <Icon name="undo" />
         </button>
+        <button type="button" className="icon-btn" onClick={redo} disabled={!canRedo} title={`${t('redo')} (Ctrl+Y)`} aria-label={t('redo')}>
+          <Icon name="redo" />
+        </button>
         <button type="button" className="icon-btn hide-narrow" onClick={() => exportData(data)} title={t('exportHint')} aria-label={t('exportData')}>
           <Icon name="download" />
         </button>
@@ -63,15 +66,6 @@ export function Header({ onToast }: { onToast: (msg: string, kind?: 'ok' | 'erro
           <Icon name="upload" />
         </button>
         <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => setSettings({ theme: theme === 'dark' ? 'light' : 'dark' })}
-          title={theme === 'dark' ? t('themeLight') : t('themeDark')}
-          aria-label={theme === 'dark' ? t('themeLight') : t('themeDark')}
-        >
-          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-        </button>
         <div className="segmented segmented--sm" role="radiogroup" aria-label={t('language')}>
           {(['es', 'en'] as Lang[]).map((l) => (
             <button key={l} type="button" role="radio" aria-checked={lang === l} className="seg" onClick={() => setSettings({ lang: l })}>
@@ -113,6 +107,7 @@ function TeamsModal({
   const { data, setData } = useStore();
   const { t } = useI18n();
   const [toDelete, setToDelete] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const rename = (id: string, name: string) => {
     const clean = name.trim().slice(0, 60);
@@ -144,17 +139,13 @@ function TeamsModal({
       size="sm"
       footer={
         <>
-          <button
-            type="button"
-            className="btn btn--ghost push-left"
-            onClick={() => {
-              const team = emptyTeam(`${t('newTeamName')} ${data.teams.length + 1}`);
-              setData({ ...data, teams: [...data.teams, team], activeTeamId: team.id });
-            }}
-          >
-            <Icon name="plus" /> {t('newTeam')}
-          </button>
-          <button type="button" className="btn btn--primary" onClick={onClose}>{t('close')}</button>
+          {!creating && (
+            <button type="button" className="btn btn--ghost push-left" onClick={() => setCreating(true)}>
+              <Icon name="plus" /> {t('newTeam')}
+            </button>
+          )}
+          {/* While the new-team form is open, its Create button is the primary action. */}
+          <button type="button" className={`btn ${creating ? 'btn--ghost' : 'btn--primary'}`} onClick={onClose}>{t('close')}</button>
         </>
       }
     >
@@ -181,6 +172,7 @@ function TeamsModal({
           </li>
         ))}
       </ul>
+      {creating && <NewTeamForm onDone={() => setCreating(false)} />}
       <section className="field">
         <span className="label">{t('data')}</span>
         <div className="data-actions">
@@ -194,5 +186,71 @@ function TeamsModal({
         <p className="muted small">{t('exportHint')}. {t('importHint')}.</p>
       </section>
     </Modal>
+  );
+}
+
+/** New team: a name and what to start from (an empty team, or a copy of an existing one). */
+function NewTeamForm({ onDone }: { onDone: () => void }) {
+  const { data, setData } = useStore();
+  const { t } = useI18n();
+  const [from, setFrom] = useState('');
+  const defaultName = (source: string) => {
+    const team = data.teams.find((tm) => tm.id === source);
+    return team ? t('copyOfTeam', { name: team.name }) : `${t('newTeamName')} ${data.teams.length + 1}`;
+  };
+  const [name, setName] = useState(() => defaultName(''));
+  const [named, setNamed] = useState(false); // the user typed a name: keep it when the source changes
+
+  const create = () => {
+    const clean = name.trim().slice(0, 60) || defaultName(from);
+    const source = data.teams.find((tm) => tm.id === from);
+    const team = source ? copyTeam(source, clean) : emptyTeam(clean);
+    setData({ ...data, teams: [...data.teams, team], activeTeamId: team.id });
+    onDone();
+  };
+
+  return (
+    <form
+      className="field new-team"
+      onSubmit={(e) => {
+        e.preventDefault();
+        create();
+      }}
+    >
+      <span className="label">{t('newTeam')}</span>
+      <input
+        className="input"
+        value={name}
+        maxLength={60}
+        aria-label={t('team')}
+        autoFocus
+        onChange={(e) => {
+          setName(e.target.value);
+          setNamed(true);
+        }}
+      />
+      <label className="new-team-from">
+        <span className="muted small">{t('startFrom')}</span>
+        <select
+          className="input"
+          value={from}
+          onChange={(e) => {
+            setFrom(e.target.value);
+            if (!named) setName(defaultName(e.target.value));
+          }}
+        >
+          <option value="">{t('emptyTeamOption')}</option>
+          {data.teams.map((tm) => (
+            <option key={tm.id} value={tm.id}>{t('copyOfTeam', { name: tm.name })}</option>
+          ))}
+        </select>
+      </label>
+      <div className="new-team-actions">
+        <button type="button" className="btn btn--ghost" onClick={onDone}>{t('cancel')}</button>
+        <button type="submit" className="btn btn--primary">
+          <Icon name="plus" /> {t('createTeam')}
+        </button>
+      </div>
+    </form>
   );
 }

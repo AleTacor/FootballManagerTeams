@@ -1,4 +1,4 @@
-/* Design tokens — the only place raw colours and sizes live. See the ui-design skill. */
+/* Design tokens — the only place raw colours and sizes live. Dark theme only. See the ui-design skill. */
 :root {
   color-scheme: dark;
 
@@ -36,6 +36,19 @@
   --fam-ineffectual: #e5534b;
   --fam-unknown: #8b98a5;
 
+  /* sub links: one colour per starter, shared by the subs who replace him (always with his name) */
+  --link-1: #4fc3f7;
+  --link-2: #f06292;
+  --link-3: #ffb74d;
+  --link-4: #aed581;
+  --link-5: #ba68c8;
+  --link-6: #4db6ac;
+  --link-7: #fff176;
+  --link-8: #ff8a65;
+  --link-9: #7986cb;
+  --link-10: #f5f5f5;
+  --link-11: #bcaaa4;
+
   /* pitch */
   --pitch-a: #1d6b45;
   --pitch-b: #1a6140;
@@ -63,6 +76,9 @@
   --control-h: 36px;
   --header-h: 56px;
   --panel-w: 400px;
+  /* height kept free around the pitch on desktop: phase/view controls above, hint below */
+  --pitch-reserve: 110px;
+  --pitch-min-h: 650px;
 
   /* type */
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -75,40 +91,6 @@
   /* motion */
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --fast: 140ms;
-}
-
-[data-theme="light"] {
-  color-scheme: light;
-  --bg: #f3f5f7;
-  --surface: #ffffff;
-  --surface-2: #eef1f4;
-  --surface-3: #e2e7ec;
-  --border: #d5dce3;
-  --text: #15202b;
-  --text-muted: #56636f;
-  --accent: #1f8a64;
-  --accent-text: #ffffff;
-  --accent-soft: rgb(31 138 100 / 0.12);
-  --danger: #c93a32;
-  --danger-soft: rgb(201 58 50 / 0.1);
-  --warning: #a77d0b;
-  --warning-soft: rgb(167 125 11 / 0.12);
-  --info: #2a76b3;
-  --overlay: rgb(20 30 40 / 0.35);
-  --shadow: 0 8px 28px rgb(20 30 40 / 0.18);
-  --pos-gk: #a77d0b;
-  --pos-def: #2a76b3;
-  --pos-mid: #1f8a64;
-  --pos-att: #c93a32;
-  --fam-natural: #16a34a;
-  --fam-accomplished: #65a30d;
-  --fam-competent: #ca8a04;
-  --fam-unconvincing: #ea7a16;
-  --fam-awkward: #dc5a26;
-  --fam-ineffectual: #c93a32;
-  --fam-unknown: #7a8793;
-  --pitch-a: #2f8a5b;
-  --pitch-b: #2b8155;
 }
 
 @media (max-width: 720px) {

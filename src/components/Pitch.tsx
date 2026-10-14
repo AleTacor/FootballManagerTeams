@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { auxOf, familiarityAt, isStarter, mainOf, removeAssignment, starterOf } from '../domain/logic';
-import { POS_GROUP, SLOTS, type SlotDef } from '../domain/positions';
+import { auxOf, familiarityAt, mainOf, removeAssignment, starterOf } from '../domain/logic';
+import { POS_GROUP, SLOT_BY_ID, SLOTS, type SlotDef } from '../domain/positions';
 import { roleAbbr, roleName } from '../domain/roles';
 import type { Assignment, Phase, Player, SlotId, View } from '../domain/types';
 import { useI18n } from '../i18n/I18n';
@@ -8,6 +8,7 @@ import { useStore } from '../state/store';
 import { useDnd } from './dnd';
 import { FamDot } from './FamDot';
 import { Icon } from './Icon';
+import { linkColors, linkStyle } from './links';
 import { shortName } from './names';
 import { useLatest } from './useLatest';
 
@@ -77,32 +78,44 @@ function SlotNode({
   const main = mainOf(team, phase, slot.id);
   const aux = auxOf(team, phase, slot.id);
 
+  const colors = linkColors(team);
+  // The starter of this slot has a main sub playing in another slot.
+  const coveredElsewhere = !!starter && !main && team.assignments.some(
+    (a) => a.phase === phase && a.tier === 'main' && a.replaces === starter.playerId,
+  );
+
   let assignment: Assignment | undefined;
   let faded = false;
   let kind: 'token' | 'empty' | 'nosub' | 'auxonly' = 'empty';
   if (view === 'starters') {
     assignment = starter;
     kind = starter ? 'token' : 'empty';
+  } else if (starter && coveredElsewhere && !aux.length) {
+    kind = 'empty';
   } else if (starter) {
     assignment = main;
     kind = main ? 'token' : aux.length ? 'auxonly' : 'nosub';
   } else if (main || aux.length) {
     assignment = main;
-    faded = true;
+    // A main sub playing another position than the starter he replaces is shown at full strength.
+    const replacedSlot = main && starterSlotOf(team.assignments, phase, main.replaces);
+    faded = !(replacedSlot && SLOT_BY_ID[replacedSlot].pos !== slot.pos);
     kind = main ? 'token' : 'auxonly';
   }
 
   const player: Player | undefined = assignment ? team.players.find((p) => p.id === assignment!.playerId) : undefined;
   const fam = assignment ? familiarityAt(player, phase, slot.id) : null;
-  const alsoStarter = view === 'subs' && !!assignment && isStarter(team, assignment.playerId, phase);
   const plusCount = view === 'subs' ? aux.length : 0;
   const abbr = assignment ? roleAbbr(assignment.role, lang) : '';
+  // In the subs view, the starter the shown sub replaces (his colour and surname under the token).
+  const replaced = view === 'subs' && assignment?.replaces ? team.players.find((p) => p.id === assignment!.replaces) : undefined;
+  const linkColor = replaced ? colors.get(replaced.id) : coveredElsewhere && kind === 'empty' ? colors.get(starter!.playerId) : undefined;
 
   const label = [
     pos(slot.pos),
     player ? player.name : kind === 'nosub' ? t('noSub') : '',
     assignment?.role ? roleName(assignment.role, lang) : '',
-    alsoStarter ? t('alsoStarter') : '',
+    replaced ? t('replacesName', { name: replaced.name }) : '',
     plusCount ? `+${plusCount} ${t('aux')}` : '',
   ].filter(Boolean).join(', ');
 
@@ -114,11 +127,16 @@ function SlotNode({
     faded && 'slot--faded',
     selected && 'slot--selected',
     overSlot === slot.id && 'slot--over',
-    alsoStarter && 'slot--also-starter',
+    linkColor && 'slot--linked',
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={cls} style={{ left: `${slot.x}%`, top: `${slot.y}%` }} data-drop-slot={slot.id} data-group={POS_GROUP[slot.pos]}>
+    <div
+      className={cls}
+      style={{ left: `${slot.x}%`, top: `${slot.y}%`, ...linkStyle(linkColor) }}
+      data-drop-slot={slot.id}
+      data-group={POS_GROUP[slot.pos]}
+    >
       <button
         type="button"
         className="slot-btn"
@@ -139,9 +157,14 @@ function SlotNode({
           <>
             <span className="disc" data-fam={fam ?? 'none'} aria-hidden="true">
               {kind === 'token' ? abbr || pos(slot.pos) : kind === 'nosub' ? '—' : ''}
-              {alsoStarter && <span className="disc-badge">XI</span>}
             </span>
             {player && <span className="token-name" aria-hidden="true">{shortName(player.name)}</span>}
+            {replaced && (
+              <span className="token-link" aria-hidden="true">
+                <span className="link-swatch" />
+                {shortName(replaced.name)}
+              </span>
+            )}
             {kind === 'nosub' && <span className="token-name token-name--muted" aria-hidden="true">{t('noSub')}</span>}
           </>
         )}
@@ -175,6 +198,7 @@ function PlusPopover({ slot, phase, onClose, onManage }: { slot: SlotId; phase: 
   const def = SLOTS.find((s) => s.id === slot)!;
   const aux = auxOf(team, phase, slot);
   const list = [mainOf(team, phase, slot), ...aux].filter((a): a is Assignment => !!a);
+  const colors = linkColors(team);
 
   // The popover belongs to the +N pill: once the last auxiliary sub is gone, close it.
   useEffect(() => {
@@ -225,10 +249,19 @@ function PlusPopover({ slot, phase, onClose, onManage }: { slot: SlotId; phase: 
       <ul className="popover-list">
         {list.map((a) => {
           const p = team.players.find((x) => x.id === a.playerId);
+          const replaced = a.replaces ? team.players.find((x) => x.id === a.replaces) : undefined;
           return (
             <li key={a.id}>
               <FamDot level={familiarityAt(p, phase, slot)} />
-              <span className="grow truncate">{p?.name}</span>
+              <span className="grow min0">
+                <span className="truncate block">{p?.name}</span>
+                {replaced && (
+                  <span className="link-line" style={linkStyle(colors.get(replaced.id))} title={t('replacesName', { name: replaced.name })}>
+                    <span className="link-swatch" aria-hidden="true" />
+                    <span className="truncate">{t('replacesName', { name: shortName(replaced.name) })}</span>
+                  </span>
+                )}
+              </span>
               <span className="muted small">{roleAbbr(a.role, data.settings.lang)}</span>
               <span className={`tier-chip tier-chip--${a.tier}`}>{a.tier === 'main' ? t('mainSub') : t('aux')}</span>
               <button
@@ -253,23 +286,28 @@ function PlusPopover({ slot, phase, onClose, onManage }: { slot: SlotId; phase: 
 
 function PitchMarkings() {
   return (
-    <svg className="pitch-lines" viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true">
+    // 68 × 112: a bit longer than a real pitch, so stacked labels (name, replaced starter) fit between rows.
+    <svg className="pitch-lines" viewBox="0 0 68 112" preserveAspectRatio="none" aria-hidden="true">
       <g fill="none" stroke="var(--pitch-line)" strokeWidth="0.35">
-        <rect x="1" y="1" width="66" height="103" />
-        <line x1="1" y1="52.5" x2="67" y2="52.5" />
-        <circle cx="34" cy="52.5" r="9.15" />
+        <rect x="1" y="1" width="66" height="110" />
+        <line x1="1" y1="56" x2="67" y2="56" />
+        <circle cx="34" cy="56" r="9.15" />
         <rect x="13.84" y="1" width="40.32" height="16.5" />
         <rect x="24.84" y="1" width="18.32" height="5.5" />
-        <rect x="13.84" y="87.5" width="40.32" height="16.5" />
-        <rect x="24.84" y="98.5" width="18.32" height="5.5" />
+        <rect x="13.84" y="94.5" width="40.32" height="16.5" />
+        <rect x="24.84" y="105.5" width="18.32" height="5.5" />
         <path d="M26.7 17.5a9.15 9.15 0 0 0 14.6 0" />
-        <path d="M26.7 87.5a9.15 9.15 0 0 1 14.6 0" />
+        <path d="M26.7 94.5a9.15 9.15 0 0 1 14.6 0" />
       </g>
       <g fill="var(--pitch-line)">
-        <circle cx="34" cy="52.5" r="0.5" />
+        <circle cx="34" cy="56" r="0.5" />
         <circle cx="34" cy="12" r="0.4" />
-        <circle cx="34" cy="93" r="0.4" />
+        <circle cx="34" cy="100" r="0.4" />
       </g>
     </svg>
   );
+}
+
+function starterSlotOf(assignments: Assignment[], phase: Phase, playerId: string | null): SlotId | undefined {
+  return assignments.find((a) => a.phase === phase && a.tier === 'starter' && a.playerId === playerId)?.slot;
 }

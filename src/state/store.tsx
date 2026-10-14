@@ -15,6 +15,9 @@ interface Store {
   setSettings: (patch: Partial<AppData['settings']>) => void;
   undo: () => void;
   canUndo: boolean;
+  /** Re-applies the last undone change; any new change clears what can be redone. */
+  redo: () => void;
+  canRedo: boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -25,7 +28,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setDataState] = useState<AppData>(loadData);
   const current = useRef(data);
   const history = useRef<AppData[]>([]);
+  const future = useRef<AppData[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   useEffect(() => saveData(data), [data]);
 
@@ -34,7 +39,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (next === prev) return;
     if (record) {
       history.current = [...history.current.slice(-(HISTORY_LIMIT - 1)), prev];
+      future.current = [];
       setCanUndo(true);
+      setCanRedo(false);
     }
     current.current = next;
     setDataState(next);
@@ -64,14 +71,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const undo = useCallback(() => {
     const prev = history.current.pop();
     if (!prev) return;
+    future.current = [...future.current.slice(-(HISTORY_LIMIT - 1)), current.current];
     setCanUndo(history.current.length > 0);
-    // Keep the current language/theme: undo is for squad changes only.
+    setCanRedo(true);
+    // Keep the current language: undo and redo are for squad changes only.
     commit({ ...prev, settings: current.current.settings }, false);
   }, [commit]);
 
+  const redo = useCallback(() => {
+    const next = future.current.pop();
+    if (!next) return;
+    history.current = [...history.current.slice(-(HISTORY_LIMIT - 1)), current.current];
+    setCanRedo(future.current.length > 0);
+    setCanUndo(true);
+    commit({ ...next, settings: current.current.settings }, false);
+  }, [commit]);
+
   const value = useMemo(
-    () => ({ data, team: activeTeam(data), setData, updateTeam, setSettings, undo, canUndo }),
-    [data, setData, updateTeam, setSettings, undo, canUndo],
+    () => ({ data, team: activeTeam(data), setData, updateTeam, setSettings, undo, canUndo, redo, canRedo }),
+    [data, setData, updateTeam, setSettings, undo, canUndo, redo, canRedo],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

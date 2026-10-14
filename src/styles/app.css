@@ -81,6 +81,10 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select:
 }
 .icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .icon-btn--sm { width: 28px; height: 28px; }
+.icon-btn--danger:hover:not(:disabled) { color: var(--danger); }
+/* Brief feedback after an action (e.g. copy name). */
+.icon-btn--done, .icon-btn--done:hover:not(:disabled) { color: var(--accent); }
+.icon-btn--failed, .icon-btn--failed:hover:not(:disabled) { color: var(--danger); }
 
 .input {
   min-height: var(--control-h); width: 100%; min-width: 0;
@@ -144,13 +148,6 @@ select.input { padding-right: var(--s6); }
 .stat-chip strong { color: var(--text); }
 .stat-chip--warn { background: var(--warning-soft); color: var(--warning); }
 
-.chip {
-  display: inline-flex; align-items: center; gap: var(--s1);
-  min-height: 32px; padding: 0 var(--s3); border-radius: 16px;
-  border: 1px dashed var(--border); background: var(--surface); font-size: var(--fs-sm);
-}
-.chip:hover { border-color: var(--accent); }
-
 /* ---------- layout ---------- */
 .app { min-height: 100%; display: flex; flex-direction: column; }
 .header {
@@ -184,21 +181,23 @@ select.input { padding-right: var(--s6); }
 }
 .banner .icon { color: var(--accent); }
 
-.tray { display: flex; flex-direction: column; gap: var(--s2); }
-.tray-items { display: flex; flex-wrap: wrap; gap: var(--s2); }
-
 /* ---------- pitch ---------- */
 .pitch-wrap { display: flex; justify-content: center; }
 .pitch {
   position: relative;
   width: 100%;
-  max-width: calc((100vh - var(--header-h) - 150px) * 68 / 105);
-  min-width: 300px;
-  aspect-ratio: 68 / 105;
+  max-width: calc((100vh - var(--header-h) - var(--pitch-reserve)) * 68 / 112);
+  /* never shorter than --pitch-min-h (set as a width so the 68:112 shape is kept) */
+  min-width: calc(var(--pitch-min-h) * 68 / 112);
+  aspect-ratio: 68 / 112;
   border-radius: var(--radius-lg);
   background: repeating-linear-gradient(180deg, var(--pitch-a) 0 10%, var(--pitch-b) 10% 20%);
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
   user-select: none;
+}
+/* Touch devices (phones, tablets in any orientation): no minimum height either. */
+@media (pointer: coarse) {
+  .pitch { min-width: 0; }
 }
 .pitch-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
 
@@ -229,6 +228,7 @@ select.input { padding-right: var(--s6); }
 }
 .disc[data-fam="none"] { border-color: var(--text-muted); border-style: dotted; }
 .slot-btn:hover .disc { transform: scale(1.06); }
+.slot--selected { z-index: 2; }
 .slot--selected .disc { box-shadow: 0 0 0 3px var(--slot-target), 0 2px 8px rgb(0 0 0 / 0.4); }
 .slot--over .disc, .slot--over .slot-empty-dot { transform: scale(1.15); box-shadow: 0 0 0 3px var(--slot-target); }
 
@@ -237,12 +237,23 @@ select.input { padding-right: var(--s6); }
 }
 .slot--faded { opacity: 0.5; }
 .slot--faded:hover, .slot--faded.slot--selected { opacity: 0.85; }
-.slot--also-starter .disc { border-style: dashed; }
-.disc-badge {
-  position: absolute; bottom: -4px; left: -8px;
-  padding: 0 3px; border-radius: 3px;
-  background: var(--warning); color: #1a1300; font-size: 9px; font-weight: 800; line-height: 13px;
+/* Sub links (subs view): the disc's ring takes the colour of the starter the sub replaces
+   (instead of the familiarity colour), and his surname goes under the name. */
+.slot--linked .disc { border-color: var(--link); }
+.slot--linked.slot--empty .slot-empty-dot { background: var(--link); opacity: 0.7; }
+.link-swatch { flex: none; width: var(--dot-size); height: var(--dot-size); border-radius: 50%; background: var(--link, var(--text-muted)); }
+.token-link {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-top: 2px; max-width: 86px; padding: 0 5px; border-radius: 4px;
+  background: var(--token-label-bg); color: var(--token-label-text);
+  font-size: 10px; font-weight: 500; line-height: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.token-link .link-swatch { width: 7px; height: 7px; }
+.link-line { display: flex; align-items: center; gap: var(--s1); min-width: 0; font-size: var(--fs-xs); color: var(--text-muted); }
+.replace-select { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.replace-select .input { flex: 1 1 auto; min-width: 0; }
+.replace-fixed { min-width: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 
 .token-name {
   margin-top: 3px; max-width: 86px; padding: 1px 6px; border-radius: 4px;
@@ -316,7 +327,12 @@ select.input { padding-right: var(--s6); }
 .table-wrap {
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--surface); overflow: auto;
-  max-height: calc(100vh - var(--header-h) - 150px);
+  /* Fills the window, but never shorter than the pitch's minimum height on desktop. */
+  max-height: max(var(--pitch-min-h), calc(100vh - var(--header-h) - 150px));
+}
+/* Touch devices have no pitch minimum, so no list minimum either. */
+@media (pointer: coarse) {
+  .table-wrap { max-height: calc(100vh - var(--header-h) - 150px); }
 }
 .squad-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .squad-table thead th {
@@ -334,13 +350,33 @@ select.input { padding-right: var(--s6); }
 .squad-table tbody tr:hover { background: var(--surface-2); }
 .squad-table td, .squad-table tbody th { padding: var(--s2) var(--s3); vertical-align: middle; text-align: left; font-weight: 400; }
 .row--dragging { opacity: 0.5; }
+/* Subs view: starters of the phase stay listed but can't be dragged or placed (no starter is a main sub). */
+.row--locked .grip { opacity: 0.35; cursor: not-allowed; }
+.row--locked .grip:hover { background: none; color: var(--danger); opacity: 1; }
+.row--locked .name-btn { color: var(--text-muted); }
+/* Slightly lighter than the other rows, and no hover highlight: nothing to grab. */
+.squad-table tbody tr.row--locked,
+.squad-table tbody tr.row--locked:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
+/* The row's empty space is a drag handle for mouse and pen; its content (labels, badges,
+   buttons) isn't, keeps the normal cursor and can be selected. */
+@media (hover: hover) and (pointer: fine) {
+  .row-drag > td, .row-drag > th { cursor: grab; user-select: none; }
+  .row-drag > td > :not(.grip, button), .row-drag > th > :not(button) { cursor: auto; user-select: text; }
+  /* A locked row's drag area shows why nothing happens on press. */
+  .row--locked > td, .row--locked > th { cursor: not-allowed; }
+  .row--locked > td > :not(.grip, button), .row--locked > th > :not(button) { cursor: auto; }
+}
+/* Card labels ("In possession", "Positions"); only shown in the card layout. */
+.cell-label { display: none; }
 .col-grip { width: 28px; padding-right: 0 !important; }
 .grip { display: grid; place-items: center; width: 24px; height: 32px; color: var(--text-muted); cursor: grab; touch-action: none; border-radius: 4px; }
 .grip:hover { background: var(--surface-3); color: var(--text); }
 .col-name { width: 170px; max-width: 170px; }
 .name-btn { border: 0; background: none; padding: 0; font-weight: 600; text-align: left; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .name-btn:hover { color: var(--accent); }
-.col-actions { width: 84px; white-space: nowrap; text-align: right !important; }
+.col-actions { width: 152px; white-space: nowrap; text-align: right !important; }
+/* Four actions (place, copy name, edit, remove) at the 32px minimum hit area keep the table in its column. */
+.col-actions .icon-btn { width: 32px; }
 .col-lineup { white-space: nowrap; }
 /* Two-line header ("Out of / possession") so the phase names don't widen the columns. */
 .squad-table thead th.col-lineup { white-space: normal; line-height: 1.25; }
@@ -445,6 +481,7 @@ select.input { padding-right: var(--s6); }
 .assign-table { display: flex; flex-direction: column; gap: var(--s1); }
 .assign-row { display: grid; grid-template-columns: 44px 120px 120px minmax(0, 1fr) auto; align-items: center; gap: var(--s2); }
 .assign-row > .phase-chip, .assign-row > .tier-chip { justify-self: start; }
+.assign-row > .replace-select { grid-column: 3 / 5; }
 .assign-pos { font-weight: 600; font-size: var(--fs-sm); white-space: nowrap; }
 .assign-add { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: var(--s2); }
 
@@ -452,6 +489,9 @@ select.input { padding-right: var(--s6); }
 .team-row { display: flex; align-items: center; gap: var(--s2); }
 .team-row--active .input { border-color: var(--accent); }
 .data-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.new-team { padding: var(--s3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-2); }
+.new-team-from { display: flex; flex-direction: column; gap: var(--s1); }
+.new-team-actions { display: flex; justify-content: flex-end; gap: var(--s2); }
 
 /* ---------- toast / tabbar ---------- */
 .toast-area { position: fixed; left: 50%; bottom: var(--s6); transform: translateX(-50%); z-index: 60; pointer-events: none; }
@@ -460,9 +500,9 @@ select.input { padding-right: var(--s6); }
 .tabbar { display: none; }
 
 /* ---------- responsive ---------- */
-/* Table → cards below 1280px: the squad column gets too narrow for name, both lineup
-   columns and positions (the table needs ~690px; checked in ES and EN). */
-@media (max-width: 1279px) {
+/* Table → cards below 1300px: the squad column gets too narrow for name, both lineup
+   columns and positions (the table needs ~710px with three row actions; checked in ES and EN). */
+@media (max-width: 1299px) {
   .table-wrap { border: 0; background: none; }
   .squad-table thead { display: none; }
   .squad-table, .squad-table tbody { display: block; }
@@ -473,7 +513,7 @@ select.input { padding-right: var(--s6); }
   }
   .squad-table td, .squad-table tbody th { padding: 0; }
   .squad-table td[data-label] { grid-column: 1 / -1; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--s2); align-items: start; }
-  .squad-table td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: var(--fs-xs); padding-top: 3px; }
+  .squad-table .cell-label { display: block; color: var(--text-muted); font-size: var(--fs-xs); padding-top: 3px; }
   .squad-table .col-grip { grid-column: 1; grid-row: 1; width: auto; align-self: center; }
   .squad-table .col-name { grid-column: 2; grid-row: 1; max-width: none; width: auto; align-self: center; font-size: var(--fs-lg); }
   .squad-table td.col-actions { grid-column: 3; grid-row: 1; width: auto; }
@@ -493,6 +533,7 @@ select.input { padding-right: var(--s6); }
   .layout[data-mobile-tab="pitch"] .squad-col { display: none; }
   .layout[data-mobile-tab="squad"] .pitch-col { display: none; }
   .pitch-col { position: static; }
+  /* Phones and small tablets: no minimum height, the pitch just fits the screen width. */
   .pitch { max-width: 100%; min-width: 0; }
   .table-wrap { max-height: none; overflow: visible; }
   .squad-table .col-grip { display: none; }
@@ -520,10 +561,18 @@ select.input { padding-right: var(--s6); }
   .mini-pitch { max-width: 260px; margin: 0 auto; width: 100%; }
   .assign-row { grid-template-columns: auto auto 1fr auto; }
   .assign-row .role-select { grid-column: 1 / -1; grid-row: 2; }
+  .assign-row > .replace-select { grid-column: 1 / -1; grid-row: 3; }
   .assign-add { grid-template-columns: 1fr 1fr; }
   .modal-backdrop { padding: 0; place-items: end stretch; }
   .modal { max-height: 92vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
   .modal--md, .modal--sm { max-width: none; }
+}
+
+/* Narrow phones: only the discs, so tokens don't overlap. The selected slot shows its labels
+   (player name, who he replaces); the slot's aria-label always has them. */
+@media (max-width: 419px) {
+  .slot:not(.slot--selected) .token-name,
+  .slot:not(.slot--selected) .token-link { display: none; }
 }
 
 @media (max-width: 520px) {

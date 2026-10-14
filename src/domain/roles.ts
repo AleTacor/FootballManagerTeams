@@ -114,6 +114,11 @@ export function rolesFor(pos: PosCode, phase: Phase): string[] {
   return ROLES_BY_GROUP[ROLE_GROUP[pos]][phase];
 }
 
+/** The role FM26 gives a position by default: the generic one named after it, first in the list. */
+export function defaultRole(pos: PosCode, phase: Phase): string {
+  return rolesFor(pos, phase)[0];
+}
+
 /** Keeps a role only if it is valid for the new position (custom roles always survive). */
 export function roleFits(role: string | null, pos: PosCode, phase: Phase): boolean {
   if (!role) return true;

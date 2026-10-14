@@ -7,6 +7,7 @@ import { useStore } from '../state/store';
 import { useSlotLabel } from './slotLabel';
 import { ConfirmDialog, Modal } from './Modal';
 import { PositionPicker } from './PositionPicker';
+import { ReplaceSelect } from './ReplaceSelect';
 import { RoleSelect } from './RoleSelect';
 import { ScreenshotFill } from './ScreenshotFill';
 import { Icon } from './Icon';
@@ -40,7 +41,12 @@ export function PlayerEditor({ playerId, image, onClose, onError }: Props) {
     if (!name.trim()) e.name = t('nameRequired');
     setErrors(e);
     if (e.name) return;
-    const player: Player = { id: existing?.id ?? uid(), name: name.trim(), positions: { ip: { ...positions }, oop: { ...positions } } };
+    const player: Player = {
+      id: existing?.id ?? uid(),
+      name: name.trim(),
+      positions: { ip: { ...positions }, oop: { ...positions } },
+      ...(existing?.roles && { roles: existing.roles }),
+    };
     updateTeam((tm) => upsertPlayer(tm, player));
     onClose();
   };
@@ -169,6 +175,7 @@ function AssignmentsEditor({ player, positions, onError }: { player: Player; pos
               >
                 <Icon name="trash" />
               </button>
+              {a.tier !== 'starter' && <ReplaceSelect assignment={a} />}
             </li>
           ))}
         </ul>

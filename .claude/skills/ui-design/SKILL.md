@@ -13,8 +13,8 @@ screen or a scouting tool, not a marketing site. Every UI change should make squ
 ## Stack and where things live
 
 - **Vite + React 19 + TypeScript**, plain CSS. No UI kit, no icon package, no DnD library.
-- `src/styles/tokens.css`: **all** colours, spacing, sizes and type, for both themes
-  (`[data-theme="light"]` overrides). `src/styles/app.css`: component styles that use only tokens.
+- `src/styles/tokens.css`: **all** colours, spacing, sizes and type (dark theme only).
+  `src/styles/app.css`: component styles that use only tokens.
 - `src/domain/`: types, pitch slots (`positions.ts`), FM26 roles per position and phase
   (`roles.ts`), lineup rules as pure functions (`logic.ts`). UI never re-implements lineup rules.
 - `src/i18n/strings.ts`: every visible string, in `es` and `en`. Position labels and
@@ -35,7 +35,7 @@ screen or a scouting tool, not a marketing site. Every UI change should make squ
 4. Build and test with real-looking data: the example squad (25 fictional players, long names,
    players without roles, subs in positions the XI doesn't use). Use **Load example squad**.
    Never test with 3 tidy rows.
-5. Check dark and light themes, a 390px phone and a 1280–1366px laptop, Spanish and English,
+5. Check a 390px phone and a 1280–1366px laptop, Spanish and English,
    and keyboard-only use.
 6. Run the checklist at the end.
 
@@ -50,10 +50,10 @@ type --font-ui Inter/system-ui; --fs-xs 12 / --fs-sm 13 / --fs-md 14 / --fs-lg 1
 controls --control-h 36   motion --fast 140ms, --ease
 ```
 
-Dark is the default theme (FM players use dark UIs for long sessions); light must work too.
-The theme and `lang` are set on `<html>` (`data-theme`, `lang`). Never write raw hex values
-or one-off pixel values in components. Use a token, or add a new one to `tokens.css` for both
-themes.
+The app has **only a dark theme** (FM players use dark UIs for long sessions; the light theme
+was removed at the user's request, don't bring it back). `lang` is set on `<html>`. Never write
+raw hex values or one-off pixel values in components. Use a token, or add a new one to
+`tokens.css`.
 
 ## Football conventions
 
@@ -91,7 +91,8 @@ Wherever a short label is shown, its `title` gives the full name (`posName(code)
 
 **Roles.** FM26 roles depend on position **and** phase (`rolesFor(pos, phase)`). Pitch tokens
 show the role abbreviation in the current language, or the position label if there is no role.
-Roles belong to the slot: replacing or swapping players keeps the slot's role. Users can type
+A player arriving in a slot gets his own remembered role there, else the position's FM26
+default; roles never pass to another player or slot. Users can type
 a custom role (`custom:<text>`).
 
 **Attribute ratings (1–20).** Use this fixed scale on every screen, always showing the number:
@@ -106,21 +107,45 @@ date, in warning colour when it is less than 12 months away. Format with the cur
 
 ## Pitch rules
 
-- Vertical pitch, attack upwards, ratio 68:105, striped green (`--pitch-a/b`), SVG markings.
+- Vertical pitch, attack upwards, ratio 68:112 (longer than real, so the stacked token labels fit),
+  at least `--pitch-min-h` (650px) tall on desktop only (not ≤860px nor on touch devices,
+  `pointer: coarse`: phones and tablets fit the pitch to the screen), striped green (`--pitch-a/b`), SVG markings.
   There are 24 fixed slots (`SLOTS` in positions.ts): 5 columns × rows ST/AM/M/DM-WB/D/GK.
 - Token = disc (`--token-size`) with a familiarity ring and role abbreviation, plus a dark
   name label (surname, truncated). Empty slots are small faint dots that grow into dashed
   targets while dragging or placing.
-- **Starters view:** the XI only.
+- **Starters view:** the XI only. The 11th place is the goalkeeper's (10 outfield starters max,
+  with a toast in both languages); the GK slot may be empty.
 - **Substitutes view:** keep the starters' slots and show each slot's main sub there. A slot
-  with a starter but no sub shows a dashed "No sub" disc. Subs in slots the XI doesn't use
-  are drawn at 50% opacity. A **+N** pill (warning colour) appears when there are auxiliary
+  with a starter but no sub shows a dashed "No sub" disc; if that starter's main sub plays
+  in another slot, it shows a small dot in the starter's link colour instead. Subs in slots
+  the XI doesn't use are drawn at 50% opacity, except a main sub playing a different
+  position (`PosCode`) than the starter he replaces, who is drawn at full opacity.
+- **Sub links:** every sub replaces a starter (`replaces`). Each starter has a colour
+  (`--link-1…11`, `linkColors()` in `components/links.ts`, same colour in both phases); the
+  sub's disc ring takes it (instead of the familiarity colour) and the token gets a second
+  label with a swatch and the starter's surname. Colour is never alone: the name is always shown, and the slot `aria-label` says
+  "Replaces {name}". The +N popover, the slot panel and the player editor show the same
+  swatch; the panel and editor change an aux sub's link with `ReplaceSelect`. A main sub's
+  starter is fixed when he's placed, so `ReplaceSelect` shows it as text. A **+N** pill (warning colour) appears when there are auxiliary
   subs; it opens a popover listing everyone assigned, each with a × to remove them from the
-  position (the popover closes when no auxiliary sub is left). A starter who is also a sub elsewhere
-  gets a dashed ring and an **XI** badge.
+  position (the popover closes when no auxiliary sub is left). Starters are never main subs, so
+  no main sub token is ever a starter.
 - Clicking a slot opens `SlotPanel`: assigned players (role select, remove, make main) and
   candidates who can play there, with a toggle to show the rest. In the subs view, the slot's
-  own starter is never a candidate.
+  own starter is never a candidate, and other starters are disabled as main sub (title
+  explains why) but can still be added as aux with +.
+- **Squad list in the subs view:** starters of the phase stay listed (`.row--locked`) but
+  can't be dragged, and their Place button is disabled with the reason as its title.
+- **Squad row actions:** Place, Copy name, Edit and Remove (trash, danger colour on hover, asks with
+  `ConfirmDialog` because it also removes the player's lineup spots). 32px buttons in the table.
+  Copy name gives feedback in the button itself for 1.5 s: a check in `--accent`
+  (`.icon-btn--done`), or an x in `--danger` (`.icon-btn--failed`) if the clipboard refuses,
+  with title and aria-label saying so.
+- **Main subs only where a starter plays:** placing a new main sub on a slot with no starter
+  adds him as aux (no error), and "Make main sub" is hidden there. Dragging an existing main
+  sub on the pitch keeps him main for the same starter, wherever he's dropped. An aux sub's `ReplaceSelect`
+  has a "Replaces nobody" option; a main sub always replaces someone.
 - The panel closes on Esc, its × button, or a click outside it. Clicks on pitch slots, the
   +N popover and dialogs don't count as outside, and neither does the click that ends a drag.
 - A drop does **not** open the panel (it would cover the pitch while arranging the XI). Placing
@@ -135,10 +160,18 @@ date, in warning colour when it is less than 12 months away. Format with the cur
 - **Drag and drop** uses `dnd.tsx`: pointer events (mouse + touch). Draggables call
   `startDrag(e, payload)` and set `touch-action: none` on the handle. Drop targets carry
   `data-drop-slot`. A press without movement stays a click. Esc cancels.
+  Squad rows drag from the grip, the name or the row's empty space with mouse/pen (`.row-drag`,
+  grab cursor; the name keeps the pointer cursor since a click opens the editor); labels,
+  badges and the other buttons don't start a drag and stay selectable. A row that can't be
+  dragged (`.row--locked`) shows the `not-allowed` cursor on its grip and empty space, a muted name, a slightly
+  lighter background (4% `--text`) with no hover highlight, and a `--danger` grip on hover. Touch drags
+  only from the grip so swipes still scroll. Card labels are real `.cell-label` spans.
 - **Every drag has a non-drag path** (keyboard fallback: select, then choose target): the
   "Place on pitch" button (then pick a slot), or click a slot and choose from the list.
 - Destructive actions (remove player, delete team, import) use `ConfirmDialog`. Small
   reversible ones (remove from a position) don't, because Undo (Ctrl/Cmd+Z) covers them.
+  Redo (Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z, header button next to Undo) re-applies undone
+  changes until a new change is made.
 - Errors from lineup rules (for example 11 starters max) show as a toast, in both languages.
 - Dialogs: `Modal` traps focus, closes on Esc and on a backdrop click, and runs focus logic
   **once** per open (keep `onClose` in a ref). Re-running focus code on each render causes
@@ -146,20 +179,26 @@ date, in warning colour when it is less than 12 months away. Format with the cur
 
 ## Layout
 
-- **Desktop:** header (team picker, undo, export/import, theme, ES/EN). Below it, two
+- **Desktop:** header (team picker, undo, redo, export/import, ES/EN). Below it, two
   columns: a sticky pitch column (phase + view switches, starter count, pitch) and the
   squad table. `SlotPanel` floats over the right edge without blocking the pitch.
-- **<1280px:** the squad table turns into cards (grip + name + actions on top, labelled rows
+- **<1300px:** the squad table turns into cards (grip + name + actions on top, labelled rows
   below), because the squad column is too narrow for the table (~690px). Re-measure this
   breakpoint in ES and EN when columns change. Never make the page scroll sideways.
 - **≤860px:** a bottom tab bar (Pitch / Squad), the panel becomes a bottom sheet, dialogs
   become bottom sheets; squad cards lose the drag grip (use Place).
 - **≤520px:** export/import leave the header (they're in the Teams & data dialog).
+- **<420px:** pitch tokens show only the disc; the name and "replaces" labels appear on the
+  selected slot only (it's raised above its neighbours). The `aria-label` keeps them.
 - **Squad table:**
   - Columns: Name · lineup *In possession* · lineup *Out of possession* (each: tier chip, slot,
     role, +N; sortable) · Positions (one merged list, `mergePositions()`).
   - Sticky header; sortable columns with a visible direction and `aria-sort`.
+  - Its scroll area fills the window but is never shorter than `--pitch-min-h` on desktop
+    (same rule as the pitch; no minimum on touch devices).
   - Filters (All / Starters / Subs / Unassigned) and search.
+    The status filter is kept per pitch view for the session (not saved): Starters view
+    starts on All, Subs view on Subs; a filter picked in a view comes back with that view.
   - Compact rows (aim for 36–40px per line, short tier chips), hover highlight.
   - Numbers right-aligned and `tabular-nums`.
   - When columns grow (attributes), add a column picker and a density toggle rather than
@@ -197,7 +236,7 @@ date, in warning colour when it is less than 12 months away. Format with the cur
 
 ## Accessibility (required)
 
-- Text contrast ≥ 4.5:1 in both themes (check `--text-muted` on `--surface-2`).
+- Text contrast ≥ 4.5:1 (check `--text-muted` on `--surface-2`).
 - `:focus-visible` ring: `outline: 2px solid var(--accent); outline-offset: 2px`.
 - Hit areas ≥ 32px, and ≥ 44px for pitch slots and touch.
 - Pitch slots are buttons whose `aria-label` reads the position, player, role and tier.
@@ -220,8 +259,7 @@ components so they stay testable.
       text or a title
 - [ ] Numbers are tabular and right-aligned
 - [ ] Works with the 25-player example, long names, missing roles, empty squad
-- [ ] Starters and Subs views both correct in both phases (faded slots, +N, XI badge)
-- [ ] Dark and light themes both checked
+- [ ] Starters and Subs views both correct in both phases (faded slots, +N, sub link colours and names)
 - [ ] Checked at 390px and 1280–1366px widths
 - [ ] Keyboard-only: place a player, pick a role, close panels with Esc; focus ring visible
 - [ ] Mouse drag and touch drag both work; no `pageerror` in the console

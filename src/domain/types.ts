@@ -2,7 +2,6 @@ export type Phase = 'ip' | 'oop';
 export type View = 'starters' | 'subs';
 export type Tier = 'starter' | 'main' | 'aux';
 export type Lang = 'es' | 'en';
-export type Theme = 'dark' | 'light';
 
 /** Positions a player can be familiar with (FM position codes). */
 export type PosCode =
@@ -25,10 +24,15 @@ export type Familiarity =
 
 export type PositionMap = Partial<Record<PosCode, Familiarity>>;
 
+/** Last role a player had in each pitch slot, per phase (role id or `custom:<text>`). */
+export type RoleMemory = Partial<Record<Phase, Partial<Record<SlotId, string>>>>;
+
 export interface Player {
   id: string;
   name: string;
   positions: Record<Phase, PositionMap>;
+  /** Missing until the player is first placed with a role. */
+  roles?: RoleMemory;
 }
 
 /**
@@ -37,6 +41,9 @@ export interface Player {
  * - main:    main substitute, one per slot and phase; a player can be main sub in many slots.
  * - aux:     extra substitutes, many per slot.
  * `role` is a role id (see roles.ts), `custom:<text>` for a free-text role, or null.
+ * `replaces` (subs only) is the id of the starter the sub comes on for, in the same phase. He
+ * plays in `slot`, which may be another position. Null for starters, and for a main sub when
+ * every starter already has one.
  */
 export interface Assignment {
   id: string;
@@ -45,6 +52,7 @@ export interface Assignment {
   tier: Tier;
   slot: SlotId;
   role: string | null;
+  replaces: string | null;
 }
 
 export interface Team {
@@ -56,11 +64,10 @@ export interface Team {
 
 export interface Settings {
   lang: Lang;
-  theme: Theme;
 }
 
 export interface AppData {
-  version: 1;
+  version: 2;
   settings: Settings;
   teams: Team[];
   activeTeamId: string;

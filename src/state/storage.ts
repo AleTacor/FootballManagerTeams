@@ -1,6 +1,7 @@
-import { emptyTeam } from '../domain/logic';
-import { FAMILIARITY_LEVELS, POS_CODES, SLOT_BY_ID } from '../domain/positions';
-import type { AppData, Assignment, Familiarity, Lang, Phase, Player, PositionMap, Team } from '../domain/types';
+import { emptyTeam, linkLineup } from '../domain/logic';
+import { FAMILIARITY_LEVELS, POS_CODES, SLOT_BY_ID, SLOTS } from '../domain/positions';
+import { roleFits } from '../domain/roles';
+import type { AppData, Assignment, Familiarity, Lang, Phase, Player, PositionMap, RoleMemory, Team } from '../domain/types';
 
 export const STORAGE_KEY = 'fm-teams:v1';
 
@@ -15,7 +16,7 @@ function defaultLang(): Lang {
 export function defaultData(): AppData {
   const lang = defaultLang();
   const team = emptyTeam(lang === 'es' ? 'Mi equipo' : 'My team');
-  return { version: 1, settings: { lang, theme: 'dark' }, teams: [team], activeTeamId: team.id };
+  return { version: 2, settings: { lang }, teams: [team], activeTeamId: team.id };
 }
 
 export function loadData(): AppData {
@@ -64,10 +65,47 @@ function parsePositions(v: unknown): PositionMap {
   return out;
 }
 
+const PHASES: Phase[] = ['ip', 'oop'];
+
+function parseRoles(v: unknown): RoleMemory | null {
+  if (!isObj(v)) return null;
+  const out: RoleMemory = {};
+  for (const phase of PHASES) {
+    const bySlot = v[phase];
+    if (!isObj(bySlot)) continue;
+    for (const slot of SLOTS) {
+      const role = bySlot[slot.id];
+      if (!str(role)) continue;
+      const clean = role.slice(0, 80);
+      if (roleFits(clean, slot.pos, phase)) (out[phase] ??= {})[slot.id] = clean;
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 function parsePlayer(v: unknown): Player | null {
   if (!isObj(v) || !str(v.id) || !str(v.name)) return null;
   const pos = isObj(v.positions) ? v.positions : {};
-  return { id: v.id, name: v.name.slice(0, 80), positions: { ip: parsePositions(pos.ip), oop: parsePositions(pos.oop) } };
+  const roles = parseRoles(v.roles);
+  return {
+    id: v.id,
+    name: v.name.slice(0, 80),
+    positions: { ip: parsePositions(pos.ip), oop: parsePositions(pos.oop) },
+    ...(roles && { roles }),
+  };
+}
+
+/** v1 → v2: v1 had no role memory, so each player remembers the roles of his current assignments. */
+function seedRoles(team: Team): Team {
+  const players = team.players.map((p) => {
+    const roles: RoleMemory = {};
+    for (const a of team.assignments) {
+      if (a.playerId !== p.id || !a.role) continue;
+      (roles[a.phase] ??= {})[a.slot] = a.role;
+    }
+    return Object.keys(roles).length ? { ...p, roles } : p;
+  });
+  return { ...team, players };
 }
 
 function parseAssignment(v: unknown, playerIds: Set<string>): Assignment | null {
@@ -82,6 +120,8 @@ function parseAssignment(v: unknown, playerIds: Set<string>): Assignment | null 
     tier,
     slot: v.slot as Assignment['slot'],
     role: typeof v.role === 'string' && v.role ? v.role.slice(0, 80) : null,
+    // Checked against the lineup (must start in that phase) by linkLineup in parseTeam.
+    replaces: tier !== 'starter' && str(v.replaces) && playerIds.has(v.replaces) ? v.replaces : null,
   };
 }
 
@@ -92,16 +132,19 @@ function parseTeam(v: unknown): Team | null {
   const assignments = (Array.isArray(v.assignments) ? v.assignments : [])
     .map((a) => parseAssignment(a, ids))
     .filter((a): a is Assignment => !!a);
-  return { id: v.id, name: v.name.slice(0, 60), players, assignments };
+  // Older data may have starters or main subs in one phase only, starters who are main subs,
+  // or subs without the starter they replace: linkLineup fixes all of it.
+  return linkLineup({ id: v.id, name: v.name.slice(0, 60), players, assignments });
 }
 
 export function parseData(v: unknown): AppData | null {
-  if (!isObj(v) || v.version !== 1 || !Array.isArray(v.teams)) return null;
-  const teams = v.teams.map(parseTeam).filter((t): t is Team => !!t);
+  if (!isObj(v) || (v.version !== 1 && v.version !== 2) || !Array.isArray(v.teams)) return null;
+  let teams = v.teams.map(parseTeam).filter((t): t is Team => !!t);
+  if (v.version === 1) teams = teams.map(seedRoles);
   if (teams.length === 0) return null;
   const s = isObj(v.settings) ? v.settings : {};
   const lang: Lang = s.lang === 'en' || s.lang === 'es' ? s.lang : defaultLang();
-  const theme = s.theme === 'light' ? 'light' : 'dark';
   const activeTeamId = teams.some((t) => t.id === v.activeTeamId) ? (v.activeTeamId as string) : teams[0].id;
-  return { version: 1, settings: { lang, theme }, teams, activeTeamId };
+  // An old `theme` setting is ignored: the app only has the dark theme.
+  return { version: 2, settings: { lang }, teams, activeTeamId };
 }
