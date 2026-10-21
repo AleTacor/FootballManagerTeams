@@ -1,6 +1,6 @@
 import { emptyTeam, linkLineup } from '../domain/logic';
 import { FAMILIARITY_LEVELS, POS_CODES, SLOT_BY_ID, SLOTS } from '../domain/positions';
-import { roleFits } from '../domain/roles';
+import { defaultRole, roleFits } from '../domain/roles';
 import type { AppData, Assignment, Familiarity, Lang, Phase, Player, PositionMap, RoleMemory, SlotId, TargetPlan, Team } from '../domain/types';
 
 export const STORAGE_KEY = 'fm-teams:v1';
@@ -125,13 +125,16 @@ function parseAssignment(v: unknown, playerIds: Set<string>): Assignment | null 
   const phase = v.phase === 'ip' || v.phase === 'oop' ? (v.phase as Phase) : null;
   const tier = v.tier === 'starter' || v.tier === 'main' || v.tier === 'aux' ? v.tier : null;
   if (!phase || !tier || !str(v.slot) || !(v.slot in SLOT_BY_ID)) return null;
+  const pos = SLOT_BY_ID[v.slot as SlotId].pos;
+  const role = typeof v.role === 'string' && v.role ? v.role.slice(0, 80) : null;
   return {
     id: v.id,
     playerId: v.playerId,
     phase,
     tier,
     slot: v.slot as Assignment['slot'],
-    role: typeof v.role === 'string' && v.role ? v.role.slice(0, 80) : null,
+    // A role the position no longer has (the role lists changed) falls back to its default.
+    role: role && !roleFits(role, pos, phase) ? defaultRole(pos, phase) : role,
     // Checked against the lineup (must start in that phase) by linkLineup in parseTeam.
     replaces: tier !== 'starter' && str(v.replaces) && playerIds.has(v.replaces) ? v.replaces : null,
   };

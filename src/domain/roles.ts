@@ -2,10 +2,10 @@ import type { Lang, Phase, PosCode } from './types';
 
 /**
  * FM26 roles. In FM26 every tactic slot has an In Possession role and an
- * Out of Possession role. Names follow the FM26 role list. Spanish names come
- * from the Spanish game UI where known (screenshots, footballmanager.com/es);
- * the rest follow its patterns (Tracking = "marcador", Outlet = "de salida",
- * Stopping = "contundente", No-Nonsense = "práctico"). Spanish abbreviations are ours.
+ * Out of Possession role. The roles per position and phase and their Spanish names
+ * come from the Spanish game UI (role lists of every position, both phases; the role
+ * tooltips confirm which name is which where the names alone were ambiguous).
+ * Spanish abbreviations are ours.
  */
 interface RoleDef {
   en: string;
@@ -16,28 +16,30 @@ interface RoleDef {
 
 export const ROLES: Record<string, RoleDef> = {
   gk: { en: 'Goalkeeper', enAbbr: 'GK', es: 'Portero', esAbbr: 'POR' },
-  bpgk: { en: 'Ball-Playing Goalkeeper', enAbbr: 'BPGK', es: 'Portero con toque', esAbbr: 'PCT' },
-  nngk: { en: 'No-Nonsense Goalkeeper', enAbbr: 'NNGK', es: 'Portero práctico', esAbbr: 'PPR' },
-  lhk: { en: 'Line-Holding Keeper', enAbbr: 'LHK', es: 'Portero de línea', esAbbr: 'PDL' },
-  sk: { en: 'Sweeper Keeper', enAbbr: 'SK', es: 'Portero líbero', esAbbr: 'PL' },
+  bpgk: { en: 'Ball-Playing Goalkeeper', enAbbr: 'BPGK', es: 'Portero con juego de pies', esAbbr: 'PJP' },
+  nngk: { en: 'No-Nonsense Goalkeeper', enAbbr: 'NNGK', es: 'Portero sin complicaciones', esAbbr: 'PSC' },
+  lhk: { en: 'Line-Holding Keeper', enAbbr: 'LHK', es: 'Portero de línea de gol', esAbbr: 'PLG' },
+  sk: { en: 'Sweeper Keeper', enAbbr: 'SK', es: 'Portero cierre', esAbbr: 'PCI' },
 
   cb: { en: 'Centre-Back', enAbbr: 'CB', es: 'Central', esAbbr: 'DFC' },
   bpcb: { en: 'Ball-Playing Centre-Back', enAbbr: 'BPCB', es: 'Central con toque', esAbbr: 'CCT' },
-  nncb: { en: 'No-Nonsense Centre-Back', enAbbr: 'NNCB', es: 'Central práctico', esAbbr: 'CPR' },
-  acb: { en: 'Advanced Centre-Back', enAbbr: 'ACB', es: 'Central adelantado', esAbbr: 'CAD' },
+  nncb: { en: 'No-Nonsense Centre-Back', enAbbr: 'NNCB', es: 'Central defensivo', esAbbr: 'CDF' },
+  acb: { en: 'Advanced Centre-Back', enAbbr: 'ACB', es: 'Central avanzado', esAbbr: 'CAV' },
   ocb: { en: 'Overlapping Centre-Back', enAbbr: 'OCB', es: 'Central con proyección ofensiva', esAbbr: 'CPO' },
   wcb: { en: 'Wide Centre-Back', enAbbr: 'WCB', es: 'Central lateral', esAbbr: 'CLA' },
   ccb: { en: 'Covering Centre-Back', enAbbr: 'CCB', es: 'Central de cobertura', esAbbr: 'CCO' },
   scb: { en: 'Stopping Centre-Back', enAbbr: 'SCB', es: 'Central contundente', esAbbr: 'CCN' },
+  cwcb: { en: 'Covering Wide Centre-Back', enAbbr: 'CWCB', es: 'Central lateral de cobertura', esAbbr: 'CLCO' },
+  swcb: { en: 'Stopping Wide Centre-Back', enAbbr: 'SWCB', es: 'Central lateral contundente', esAbbr: 'CLCN' },
 
   fb: { en: 'Full-Back', enAbbr: 'FB', es: 'Lateral', esAbbr: 'LAT' },
-  ifb: { en: 'Inside Full-Back', enAbbr: 'IFB', es: 'Lateral interior', esAbbr: 'LIN' },
+  ifb: { en: 'Inside Full-Back', enAbbr: 'IFB', es: 'Lateral por dentro', esAbbr: 'LPD' },
   hfb: { en: 'Holding Full-Back', enAbbr: 'HFB', es: 'Lateral de contención', esAbbr: 'LCO' },
   pfb: { en: 'Pressing Full-Back', enAbbr: 'PFB', es: 'Lateral presionante', esAbbr: 'LPR' },
-  wb: { en: 'Wing-Back', enAbbr: 'WB', es: 'Carrilero', esAbbr: 'CAR' },
-  iwb: { en: 'Inside Wing-Back', enAbbr: 'IWB', es: 'Carrilero interior', esAbbr: 'CIN' },
-  pwb: { en: 'Playmaking Wing-Back', enAbbr: 'PWB', es: 'Carrilero creativo', esAbbr: 'CCR' },
-  awb: { en: 'Advanced Wing-Back', enAbbr: 'AWB', es: 'Carrilero adelantado', esAbbr: 'CAD' },
+  wb: { en: 'Wing-Back', enAbbr: 'WB', es: 'Lateral ofensivo', esAbbr: 'LOF' },
+  iwb: { en: 'Inside Wing-Back', enAbbr: 'IWB', es: 'Carrilero por dentro', esAbbr: 'CPD' },
+  pwb: { en: 'Playmaking Wing-Back', enAbbr: 'PWB', es: 'Lateral ofensivo creador', esAbbr: 'LOC' },
+  awb: { en: 'Advanced Wing-Back', enAbbr: 'AWB', es: 'Lateral ofensivo avanzado', esAbbr: 'LOA' },
   hwb: { en: 'Holding Wing-Back', enAbbr: 'HWB', es: 'Carrilero de contención', esAbbr: 'CCO' },
   prwb: { en: 'Pressing Wing-Back', enAbbr: 'PrWB', es: 'Carrilero presionante', esAbbr: 'CPR' },
 
@@ -46,27 +48,27 @@ export const ROLES: Record<string, RoleDef> = {
   hb: { en: 'Half-Back', enAbbr: 'HB', es: 'Medio cierre', esAbbr: 'MCI' },
   b2b: { en: 'Box-to-Box Midfielder', enAbbr: 'BBM', es: 'Centrocampista todoterreno', esAbbr: 'CTT' },
   b2bp: { en: 'Box-to-Box Playmaker', enAbbr: 'BBP', es: 'Organizador todoterreno', esAbbr: 'OTT' },
-  ddm: { en: 'Dropping Defensive Midfielder', enAbbr: 'DDM', es: 'Mediocentro de repliegue', esAbbr: 'MRE' },
-  sdm: { en: 'Screening Defensive Midfielder', enAbbr: 'SDM', es: 'Mediocentro de pantalla', esAbbr: 'MPA' },
-  wcdm: { en: 'Wide Covering Defensive Midfielder', enAbbr: 'WCDM', es: 'Mediocentro de cobertura por banda', esAbbr: 'MCB' },
-  pdm: { en: 'Pressing Defensive Midfielder', enAbbr: 'PDM', es: 'Mediocentro presionante', esAbbr: 'MPR' },
+  ddm: { en: 'Dropping Defensive Midfielder', enAbbr: 'DDM', es: 'Mediocentro retrasado', esAbbr: 'MRE' },
+  sdm: { en: 'Screening Defensive Midfielder', enAbbr: 'SDM', es: 'Mediocentro de contención', esAbbr: 'MCO' },
+  wcdm: { en: 'Wide Covering Defensive Midfielder', enAbbr: 'WCDM', es: 'Mediocentro de amplia cobertura', esAbbr: 'MAC' },
+  pdm: { en: 'Pressing Defensive Midfielder', enAbbr: 'PDM', es: 'Mediocentro defensivo presionante', esAbbr: 'MDP' },
 
-  cm: { en: 'Central Midfielder', enAbbr: 'CM', es: 'Centrocampista', esAbbr: 'MC' },
+  cm: { en: 'Central Midfielder', enAbbr: 'CM', es: 'Centrocampista central', esAbbr: 'MC' },
   mp: { en: 'Midfield Playmaker', enAbbr: 'MP', es: 'Centrocampista organizador', esAbbr: 'COR' },
-  wcm: { en: 'Wide Central Midfielder', enAbbr: 'WCM', es: 'Centrocampista abierto', esAbbr: 'CAB' },
-  chm: { en: 'Channel Midfielder', enAbbr: 'ChM', es: 'Centrocampista buscaespacios', esAbbr: 'CBE' },
-  pcm: { en: 'Pressing Central Midfielder', enAbbr: 'PCM', es: 'Centrocampista presionante', esAbbr: 'CPR' },
-  scm: { en: 'Screening Central Midfielder', enAbbr: 'SCM', es: 'Centrocampista de pantalla', esAbbr: 'CPA' },
-  wccm: { en: 'Wide Covering Central Midfielder', enAbbr: 'WCCM', es: 'Centrocampista de cobertura por banda', esAbbr: 'CCB' },
+  wcm: { en: 'Wide Central Midfielder', enAbbr: 'WCM', es: 'Mediocampista de banda', esAbbr: 'MBA' },
+  chm: { en: 'Channel Midfielder', enAbbr: 'ChM', es: 'Centrocampista interior', esAbbr: 'CIN' },
+  pcm: { en: 'Pressing Central Midfielder', enAbbr: 'PCM', es: 'Mediocampista presionante', esAbbr: 'MPR' },
+  scm: { en: 'Screening Central Midfielder', enAbbr: 'SCM', es: 'Mediocampista de contención', esAbbr: 'MCO' },
+  wccm: { en: 'Wide Covering Central Midfielder', enAbbr: 'WCCM', es: 'Mediocampista de despliegue', esAbbr: 'MDE' },
 
   wm: { en: 'Wide Midfielder', enAbbr: 'WM', es: 'Centrocampista de banda', esAbbr: 'CBA' },
   twm: { en: 'Tracking Wide Midfielder', enAbbr: 'TWM', es: 'Centrocampista de banda marcador', esAbbr: 'CBM' },
-  wowm: { en: 'Wide Outlet Wide Midfielder', enAbbr: 'WOWM', es: 'Centrocampista de banda de salida', esAbbr: 'CBS' },
+  wowm: { en: 'Wide Outlet Wide Midfielder', enAbbr: 'WOWM', es: 'Centrocampista de banda interior', esAbbr: 'CBI' },
   w: { en: 'Winger', enAbbr: 'W', es: 'Extremo', esAbbr: 'EXT' },
   iw: { en: 'Inside Winger', enAbbr: 'IW', es: 'Extremo por dentro', esAbbr: 'EPD' },
   pw: { en: 'Playmaking Winger', enAbbr: 'PW', es: 'Extremo organizador', esAbbr: 'EOR' },
-  if: { en: 'Inside Forward', enAbbr: 'IF', es: 'Delantero interior', esAbbr: 'DIN' },
-  wf: { en: 'Wide Forward', enAbbr: 'WF', es: 'Delantero abierto', esAbbr: 'DAB' },
+  if: { en: 'Inside Forward', enAbbr: 'IF', es: 'Delantero por dentro', esAbbr: 'DPD' },
+  wf: { en: 'Wide Forward', enAbbr: 'WF', es: 'Delantero escorado', esAbbr: 'DES' },
   iow: { en: 'Inside Outlet Winger', enAbbr: 'IOW', es: 'Extremo por dentro con salida', esAbbr: 'EDS' },
   tw: { en: 'Tracking Winger', enAbbr: 'TW', es: 'Extremo marcador', esAbbr: 'EMA' },
   wow: { en: 'Wide Outlet Winger', enAbbr: 'WOW', es: 'Extremo de salida', esAbbr: 'ESA' },
@@ -75,19 +77,19 @@ export const ROLES: Record<string, RoleDef> = {
   ap: { en: 'Advanced Playmaker', enAbbr: 'AP', es: 'Organizador adelantado', esAbbr: 'OAD' },
   fr: { en: 'Free Role', enAbbr: 'FR', es: 'Rol libre', esAbbr: 'LIB' },
   ss: { en: 'Second Striker', enAbbr: 'SS', es: 'Segundo delantero', esAbbr: 'SD' },
-  coam: { en: 'Central Outlet Attacking Midfielder', enAbbr: 'COAM', es: 'Mediapunta de salida central', esAbbr: 'MSC' },
-  soam: { en: 'Splitting Outlet Attacking Midfielder', enAbbr: 'SOAM', es: 'Mediapunta de salida en ruptura', esAbbr: 'MSR' },
-  tam: { en: 'Tracking Attacking Midfielder', enAbbr: 'TAM', es: 'Mediapunta marcador', esAbbr: 'MMA' },
+  coam: { en: 'Central Outlet Attacking Midfielder', enAbbr: 'COAM', es: 'Mediapunta central iniciador', esAbbr: 'MCI' },
+  soam: { en: 'Splitting Outlet Attacking Midfielder', enAbbr: 'SOAM', es: 'Mediapunta con salida', esAbbr: 'MCS' },
+  tam: { en: 'Tracking Attacking Midfielder', enAbbr: 'TAM', es: 'Mediapunta itinerante', esAbbr: 'MIT' },
 
   cf: { en: 'Centre Forward', enAbbr: 'CF', es: 'Delantero centro', esAbbr: 'DC' },
   chf: { en: 'Channel Forward', enAbbr: 'ChF', es: 'Delantero buscaespacios', esAbbr: 'DBE' },
   dlf: { en: 'Deep-Lying Forward', enAbbr: 'DLF', es: 'Delantero de apoyo', esAbbr: 'DAP' },
   f9: { en: 'False Nine', enAbbr: 'F9', es: 'Falso nueve', esAbbr: 'F9' },
   p: { en: 'Poacher', enAbbr: 'P', es: 'Ariete', esAbbr: 'ARI' },
-  tf: { en: 'Target Forward', enAbbr: 'TF', es: 'Delantero objetivo', esAbbr: 'DOB' },
-  cocf: { en: 'Central Outlet Centre Forward', enAbbr: 'COCF', es: 'Delantero de salida central', esAbbr: 'DSC' },
-  socf: { en: 'Splitting Outlet Centre Forward', enAbbr: 'SOCF', es: 'Delantero de salida en ruptura', esAbbr: 'DSR' },
-  tcf: { en: 'Tracking Centre Forward', enAbbr: 'TCF', es: 'Delantero marcador', esAbbr: 'DMA' },
+  tf: { en: 'Target Forward', enAbbr: 'TF', es: 'Hombre objetivo', esAbbr: 'HOB' },
+  cocf: { en: 'Central Outlet Centre Forward', enAbbr: 'COCF', es: 'Delantero centro de enlace', esAbbr: 'DCE' },
+  socf: { en: 'Splitting Outlet Centre Forward', enAbbr: 'SOCF', es: 'Delantero centro buscaespacios', esAbbr: 'DCB' },
+  tcf: { en: 'Tracking Centre Forward', enAbbr: 'TCF', es: 'Delantero centro marcador', esAbbr: 'DCM' },
 };
 
 type RoleGroup = 'gk' | 'cb' | 'fb' | 'wb' | 'dm' | 'cm' | 'wm' | 'am' | 'w' | 'st';
@@ -99,12 +101,12 @@ const ROLE_GROUP: Record<PosCode, RoleGroup> = {
 
 const ROLES_BY_GROUP: Record<RoleGroup, Record<Phase, string[]>> = {
   gk: { ip: ['gk', 'bpgk', 'nngk'], oop: ['gk', 'lhk', 'sk'] },
-  cb: { ip: ['cb', 'bpcb', 'nncb', 'acb', 'ocb', 'wcb'], oop: ['cb', 'ccb', 'scb'] },
+  cb: { ip: ['cb', 'bpcb', 'nncb', 'acb', 'ocb', 'wcb'], oop: ['cb', 'ccb', 'scb', 'wcb', 'cwcb', 'swcb'] },
   fb: { ip: ['fb', 'ifb', 'wb', 'iwb', 'pwb'], oop: ['fb', 'hfb', 'pfb'] },
   wb: { ip: ['wb', 'iwb', 'pwb', 'awb'], oop: ['wb', 'hwb', 'prwb'] },
   dm: { ip: ['dm', 'dlp', 'hb', 'b2b', 'b2bp'], oop: ['dm', 'ddm', 'sdm', 'wcdm', 'pdm'] },
-  cm: { ip: ['cm', 'mp', 'wcm', 'b2b', 'b2bp', 'chm'], oop: ['cm', 'pcm', 'scm', 'wccm'] },
-  wm: { ip: ['wm', 'wcm', 'w', 'iw', 'pw'], oop: ['wm', 'twm', 'wowm'] },
+  cm: { ip: ['cm', 'mp', 'wcm', 'chm', 'ap', 'am'], oop: ['cm', 'pcm', 'scm', 'wccm'] },
+  wm: { ip: ['wm', 'w', 'iw', 'pw'], oop: ['wm', 'twm', 'wowm'] },
   am: { ip: ['am', 'ap', 'chm', 'fr', 'ss'], oop: ['am', 'coam', 'soam', 'tam'] },
   w: { ip: ['w', 'iw', 'pw', 'if', 'wf'], oop: ['w', 'iow', 'tw', 'wow'] },
   st: { ip: ['cf', 'chf', 'dlf', 'f9', 'p', 'tf'], oop: ['cf', 'cocf', 'socf', 'tcf'] },

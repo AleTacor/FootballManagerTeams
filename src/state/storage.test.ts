@@ -78,6 +78,22 @@ describe('parseData', () => {
     expect(parsed!.teams[0].assignments).toEqual([]);
   });
 
+  it('gives a role the position no longer has its default (role lists changed)', () => {
+    const parsed = parseData({
+      version: 3,
+      teams: [{
+        id: 't', name: 'T',
+        players: [{ id: 'a', name: 'A', positions: {} }],
+        assignments: [
+          { id: 'x', playerId: 'a', phase: 'ip', tier: 'aux', slot: 'MCC', role: 'b2b' },
+          { id: 'y', playerId: 'a', phase: 'ip', tier: 'aux', slot: 'DMC', role: 'b2b' },
+          { id: 'z', playerId: 'a', phase: 'ip', tier: 'aux', slot: 'DCL', role: 'custom:Líbero' },
+        ],
+      }],
+    });
+    expect(parsed!.teams[0].assignments.map((a) => a.role)).toEqual(['cm', 'b2b', 'custom:Líbero']);
+  });
+
   it('rejects things that are not exports', () => {
     for (const bad of [null, 42, 'x', [], {}, { version: 2, teams: [] }, { version: 1, teams: [] }, { version: 1, teams: 'no' }]) {
       expect(parseData(bad)).toBeNull();
