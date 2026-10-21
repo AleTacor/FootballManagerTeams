@@ -37,6 +37,10 @@ and aborts the commit if any fails. `npm install` enables it (`prepare` sets
 `core.hooksPath`). Don't bypass it with `--no-verify`; fix the failure instead. After changing
 `src/screenshot/`, also run `npm run test:images` (it skips cases whose image isn't there).
 
+**CI**: `.github/workflows/ci.yml` runs `lint`, `typecheck` and `test` on every pull request
+(no `test:images`: the fixtures aren't in the repository).
+`.github/CODEOWNERS` makes `@AleTacor` the owner of everything.
+
 ## Tests
 
 - **Vitest**, Node environment, no DOM. Tests sit next to the code as `*.test.ts`:
