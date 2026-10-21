@@ -5,4 +5,5 @@ dist
 
 # Screenshots of the game stay local (they're used by `npm run test:images`)
 ScreenShots/
+positions/
 src/test/fixtures/

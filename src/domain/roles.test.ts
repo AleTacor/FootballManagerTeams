@@ -38,6 +38,16 @@ describe('role catalogue', () => {
     }
   });
 
+  it('matches the role lists of the Spanish game UI', () => {
+    expect(rolesFor('DC', 'oop')).toEqual(['cb', 'ccb', 'scb', 'wcb', 'cwcb', 'swcb']);
+    expect(rolesFor('MC', 'ip')).toEqual(['cm', 'mp', 'wcm', 'chm', 'ap', 'am']);
+    expect(rolesFor('MC', 'ip')).not.toContain('b2b');
+    expect(rolesFor('DM', 'ip')).toContain('b2b');
+    expect(rolesFor('MR', 'ip')).toEqual(['wm', 'w', 'iw', 'pw']);
+    expect(roleName('wf', 'es')).toBe('Delantero escorado');
+    expect(roleName('tf', 'es')).toBe('Hombre objetivo');
+  });
+
   it('separates in- and out-of-possession roles (FM26)', () => {
     expect(rolesFor('GK', 'oop')).toContain('sk');
     expect(rolesFor('GK', 'ip')).not.toContain('sk');
@@ -66,7 +76,7 @@ describe('role helpers', () => {
 
   it('translates names and abbreviations', () => {
     expect(roleName('sk', 'en')).toBe('Sweeper Keeper');
-    expect(roleName('sk', 'es')).toBe('Portero líbero');
+    expect(roleName('sk', 'es')).toBe('Portero cierre');
     expect(roleAbbr('cf', 'en')).toBe('CF');
     expect(roleAbbr('cf', 'es')).toBe('DC');
     expect(roleName(null, 'en')).toBe('');

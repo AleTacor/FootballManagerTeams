@@ -249,9 +249,11 @@ src/
   above/below each letter from a 120 px rendering, using Tesseract's letter boxes. Ø, Ł and the
   ogonek (ę) aren't recovered yet; the user fixes them in the editor. The dev server reloads the page
   once the first time `tesseract.js` is imported (dependency pre-bundling); that's expected.
-- FM26 role names come from community role lists. Spanish names follow the Spanish game UI
-  where known (screenshots, footballmanager.com/es); the rest are inferred from its naming
-  patterns (see the comment in `roles.ts`). Spanish abbreviations are ours.
+- FM26 roles per position/phase and their Spanish names come from the Spanish game UI (role
+  list screenshots of every position in `positions/`, git-ignored; role tooltips settled the
+  ambiguous ones: central outlet = "central iniciador" / "de enlace" (Balance), splitting
+  outlet = "con salida" / "buscaespacios" (Pace)). Spanish abbreviations are ours. When a role leaves a position, `parseData` gives
+  assignments that still use it the position's default role.
 
 ## Roadmap
 
