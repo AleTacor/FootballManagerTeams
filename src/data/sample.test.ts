@@ -40,7 +40,7 @@ describe('example squad', () => {
   });
 
   it('survives an export/import round trip', () => {
-    const data = { version: 2 as const, settings: { lang: 'es' as const }, teams: [team], activeTeamId: team.id };
+    const data = { version: 3 as const, settings: { lang: 'es' as const }, teams: [team], activeTeamId: team.id };
     expect(parseData(JSON.parse(JSON.stringify(data)))?.teams[0]).toEqual(team);
   });
 });

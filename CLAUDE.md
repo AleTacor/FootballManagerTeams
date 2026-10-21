@@ -95,7 +95,7 @@ src/
   i18n/
     strings.ts     # all UI strings (en is the source of keys; es must match), position and familiarity labels
     I18n.tsx       # useI18n(): t(key, vars), pos(code), fam(level), lang
-  components/      # Pitch, SlotPanel, SquadList, PlayerEditor, PositionPicker, RoleSelect,
+  components/      # Pitch, SlotPanel, SquadList (+ TargetList, PlayerCells), SignDialog, PlayerEditor, PositionPicker, RoleSelect,
                    # Header (teams, undo/redo, import/export, language), Modal, Sheet, dnd, Icon
   styles/
     tokens.css     # design tokens (dark theme only)
@@ -122,8 +122,14 @@ src/
 - `role` is a role id from `roles.ts`, `custom:<text>`, or `null`.
 - `Player.roles` (optional) remembers the player's last role per phase and slot
   (`{ ip: { DCL: 'bpcb' } }`). Per slot, not per `PosCode`: MCC and MCR keep separate roles.
-- `AppData` = `{ version: 2, settings: {lang}, teams[], activeTeamId }`, stored under
+- **Transfer targets** (players you could sign) are `Player`s with `target: { slots: { ip, oop } }`.
+  They live in `team.players` but are not in the squad: `squadPlayers()` / `targetPlayers()`
+  split them, and every squad view (lists, candidates, counts) uses `squadPlayers()`. `slots`
+  is the planned slot per phase (or null); the planned role per phase is the player's
+  remembered role there. `parseData` also reads a draft shape with one `slot` for both phases.
+- `AppData` = `{ version: 3, settings: {lang}, teams[], activeTeamId }`, stored under
   the `fm-teams:v1` key. v1 had no `Player.roles`; importing it seeds them from the assignments.
+  v2 had no transfer targets and imports unchanged.
   Older data may carry `settings.theme`: it's ignored (the app is dark-only).
 
 ### Lineup rules (enforced in `logic.ts`, not in components)
@@ -172,6 +178,33 @@ src/
   slot, else his only one (skipped if unclear or the incoming player starts in that slot; the
   main sub link then fixes both players). The incoming player gets his own
   remembered role in each slot (see Role on arrival).
+- **Transfer targets never have assignments** (`assign` ignores them, `linkLineup` drops any).
+  Placing one (Place button, drag) plans his slot for the phase on screen (`planTarget`; an
+  unplanned other phase gets the same slot), with his remembered or default role there;
+  `setTargetRole` changes the planned role.
+- **Taking over** (`takeOver`, shared by promoting a main sub and signing a target as
+  starter) swaps tiers in place, in both phases, and **never moves another starter**: the
+  newcomer starts in his own spot (main sub spot / planned slot) and the starter he replaces
+  becomes his main sub in that starter's own slot, each keeping his role (that starter's old
+  slot is left empty when the spots differ). Main subs who covered the replaced starter (or
+  played in his slot) drop to aux. In a phase where the newcomer has no spot, someone else
+  starts in it, or it would change the goalkeeper, he takes the replaced starter's slot.
+- **Stepping in** (`stepIn`) is for when there's no starter to swap with: as starter he just
+  starts (if the XI has room; in the other phase in his slot there only if it's free); as sub,
+  in each phase with a slot, the main subs covering that slot's starter become aux and he
+  becomes main sub (aux if nobody starts there). Errors as `assignPlayer`.
+- **Signing** (`signTarget(team, id, 'starter'|'sub', phase)`) removes `target`; as starter
+  with a starter in his planned slot it's `takeOver`, otherwise `stepIn`. It starts from
+  `phase` unless only the other phase has a plan or (as starter) only the other phase's
+  planned slot has a starter to replace. No plan: he just joins the squad.
+- **Promoting** a main sub to starter (`promoteToStarter(team, assignmentId)`) **swaps tiers
+  in place, in both phases**: he starts in his own main sub spot and the starter he replaces
+  (else his slot's starter) becomes his main sub in his own slot, each keeping his role
+  (e.g. A starts at D (R), B is his main sub at D (C) → B starts at D (C), A is main sub at
+  D (R)). If someone else starts in B's spot in a phase, B takes A's slot and A B's spot there.
+  Another main sub already in A's slot drops to aux there (see `takeOver`). A main sub with no
+  starter to swap with just starts in his slot (`stepIn`). **Aux subs can't be promoted to starter**, only to
+  main sub (`promoteToMain`, the slot's previous main sub becomes aux).
 - Logic functions are pure and return a new `Team` (or `{ team, error }`). Components call them
   through `updateTeam(tm => …)` so every change gets an undo step.
 
@@ -202,6 +235,10 @@ src/
 - `store.tsx` keeps the latest data in a ref and records undo history outside React state
   updaters, so StrictMode's double calls don't double the history.
 - `build` doesn't type-check; always run `npm run typecheck` as well.
+- **Scroll boxes need a positioned ancestor inside them** (`.table-wrap` has `position: relative`):
+  `.sr-only` is `position: absolute`, and without one it's placed against the page, escapes the
+  scroll box and (in Chromium) stretches the page, leaving blank space below the pitch and the
+  list once the squad is long. Firefox doesn't show it, so check `offsetParent` instead.
 - **Screenshot reading** is tuned to the default FM26 skin: pitch rgb(13 68 57), the six dot
   colours (hue order = familiarity order) and the purple Actions button rgb(110 15 215), which
   anchors the name, are constants in `detect.ts`. The squad-number badge takes the club's
@@ -212,8 +249,9 @@ src/
   above/below each letter from a 120 px rendering, using Tesseract's letter boxes. Ø, Ł and the
   ogonek (ę) aren't recovered yet; the user fixes them in the editor. The dev server reloads the page
   once the first time `tesseract.js` is imported (dependency pre-bundling); that's expected.
-- FM26 role names come from community role lists; the Spanish names are our translations and
-  may differ from the official Spanish edition.
+- FM26 role names come from community role lists. Spanish names follow the Spanish game UI
+  where known (screenshots, footballmanager.com/es); the rest are inferred from its naming
+  patterns (see the comment in `roles.ts`). Spanish abbreviations are ours.
 
 ## Roadmap
 

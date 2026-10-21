@@ -137,6 +137,21 @@ date, in warning colour when it is less than 12 months away. Format with the cur
   explains why) but can still be added as aux with +.
 - **Squad list in the subs view:** starters of the phase stay listed (`.row--locked`) but
   can't be dragged, and their Place button is disabled with the reason as its title.
+- **Transfer targets** (players you could sign) use `--target` (lilac) with the `star` icon.
+  The squad column has a `Squad | Targets` radiogroup (each with a `.count`); the add button
+  follows it. Target rows: planned slot + role per phase (star, slot, role abbreviation),
+  positions, and actions Place, Sign (`userCheck`), Copy name, Edit, Remove (ConfirmDialog).
+  Placing or dropping a target on a slot plans him there **for the phase on screen** (each
+  phase can have its own slot); the slot shows a `.target-pip` (star + count, bottom-right of
+  the disc, in both views and in the slot `aria-label`) in that phase, and `SlotPanel` lists
+  the slot's targets (role for the current phase, Sign, remove from position in this phase).
+  `SignDialog` asks "As starter" / "As substitute", previewing who moves where in each phase
+  (phase chips; read from `signTarget`'s result, never re-computed in the UI); an option that
+  would fail shows the error and is disabled. Targets never appear as squad candidates or in counts.
+- **Promotion:** in `SlotPanel` (subs view) main sub rows have "Make starter" (`arrowUp`): he
+  and the starter he replaces swap tiers, each staying in his own slot, in both phases. Aux
+  rows only have "Make main sub" (aux subs can't go straight to starter). Errors (XI full)
+  show as a toast; Undo covers it, so there's no confirm.
 - **Squad row actions:** Place, Copy name, Edit and Remove (trash, danger colour on hover, asks with
   `ConfirmDialog` because it also removes the player's lineup spots). 32px buttons in the table.
   Copy name gives feedback in the button itself for 1.5 s: a check in `--accent`
@@ -196,9 +211,11 @@ date, in warning colour when it is less than 12 months away. Format with the cur
   - Sticky header; sortable columns with a visible direction and `aria-sort`.
   - Its scroll area fills the window but is never shorter than `--pitch-min-h` on desktop
     (same rule as the pitch; no minimum on touch devices).
-  - Filters (All / Starters / Subs / Unassigned) and search.
-    The status filter is kept per pitch view for the session (not saved): Starters view
-    starts on All, Subs view on Subs; a filter picked in a view comes back with that view.
+  - Filters (All / Starters / Subs / Unassigned) and search. Statuses combine (toggle
+    buttons with `aria-pressed`); from All, a status shows only that one, and deselecting
+    the last one goes back to All. The status filter is kept per pitch view for the session
+    (not saved): Starters view starts on All, Subs view on Subs + Unassigned; a filter
+    picked in a view comes back with that view.
   - Compact rows (aim for 36–40px per line, short tier chips), hover highlight.
   - Numbers right-aligned and `tabular-nums`.
   - When columns grow (attributes), add a column picker and a density toggle rather than
@@ -240,7 +257,8 @@ date, in warning colour when it is less than 12 months away. Format with the cur
 - `:focus-visible` ring: `outline: 2px solid var(--accent); outline-offset: 2px`.
 - Hit areas ≥ 32px, and ≥ 44px for pitch slots and touch.
 - Pitch slots are buttons whose `aria-label` reads the position, player, role and tier.
-- Segmented switches use `role="radiogroup"`/`radio` with `aria-checked`. Tables use
+- Segmented switches use `role="radiogroup"`/`radio` with `aria-checked`; multi-select ones
+  (squad status filter) use `role="group"` with `aria-pressed` buttons. Tables use
   `<table>`, `<th scope>` and `aria-sort`.
 
 ## Testing without network

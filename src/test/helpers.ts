@@ -30,6 +30,7 @@ export function invariantErrors(t: Team): string[] {
   const seen = new Set<string>();
   for (const a of t.assignments) {
     if (!ids.has(a.playerId)) errors.push(`assignment ${a.id} points to missing player ${a.playerId}`);
+    if (t.players.find((p) => p.id === a.playerId)?.target) errors.push(`transfer target ${a.playerId} has assignment ${a.id}`);
     const key = `${a.phase}|${a.slot}|${a.playerId}`;
     if (seen.has(key)) errors.push(`player ${a.playerId} assigned twice to ${a.phase} ${a.slot}`);
     seen.add(key);

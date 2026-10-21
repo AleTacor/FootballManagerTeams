@@ -4,7 +4,8 @@ import { asg, invariantErrors, player, rng, snapshot, team } from '../test/helpe
 import {
   assignPlayer, auxOf, canPlay, copyTeam, emptyTeam, familiarityAt, isStarter, mainOf, MAX_STARTERS,
   moveAssignment, promoteToMain, removeAssignment, removePlayer, setReplaces, setRole, sortByFamiliarity,
-  linkLineup, outfieldCount, starterAssignment, starterOf, startersCount, uid, upsertPlayer,
+  linkLineup, outfieldCount, planTarget, promoteToStarter, setTargetRole, signTarget, starterAssignment, starterOf, startersCount, uid,
+  upsertPlayer,
 } from './logic';
 import { SLOTS } from './positions';
 import type { Assignment, Phase, Player, SlotId, Team, Tier } from './types';
@@ -706,6 +707,285 @@ describe('other commands', () => {
   });
 });
 
+describe('transfer targets', () => {
+  const target = (name: string, slot: SlotId | null = null): Player => ({ ...player(name, { DC: 'natural' }), target: { slots: { ip: slot, oop: slot } } });
+  /** Ana starts at DCL and Bea is her main sub, in both phases, each with her own roles. */
+  function lineup(tgt: Player) {
+    const ana = { ...cb1, roles: { ip: { DCL: 'bpcb' }, oop: { DCL: 'ccb' } } };
+    const bea = { ...cb2, roles: { ip: { DCL: 'nncb' }, oop: { DCL: 'scb' } } };
+    return team([ana, bea, tgt], [
+      asg(ana.id, 'ip', 'starter', 'DCL', 'bpcb'),
+      asg(ana.id, 'oop', 'starter', 'DCL', 'ccb'),
+      asg(bea.id, 'ip', 'main', 'DCL', 'nncb', ana.id),
+      asg(bea.id, 'oop', 'main', 'DCL', 'scb', ana.id),
+    ]);
+  }
+  const at = (t: Team, phase: Phase, tier: Tier) =>
+    t.assignments.filter((a) => a.phase === phase && a.slot === 'DCL' && a.tier === tier).map((a) => [a.playerId, a.role, a.replaces]);
+
+  it('keeps targets out of the lineup', () => {
+    const t = team([target('Tom')]);
+    expect(assignPlayer(t, 'p-Tom', 'ip', 'DCL', 'starter').team).toBe(t);
+    expect(assignPlayer(t, 'p-Tom', 'ip', 'DCL', 'aux').team).toBe(t);
+    const dirty = team([target('Tom')], [asg('p-Tom', 'ip', 'aux', 'DCL')]);
+    expect(linkLineup(dirty).assignments).toEqual([]);
+  });
+
+  it('plans a slot with the remembered role, else the default, in each phase', () => {
+    const t = team([{ ...target('Tom'), roles: { ip: { DCL: 'wcb' } } }]);
+    const before = snapshot(t);
+    const r = planTarget(t, 'p-Tom', 'ip', 'DCL');
+    expect(t).toEqual(before);
+    expect(r.players[0].target).toEqual({ slots: { ip: 'DCL', oop: 'DCL' } });
+    expect(r.players[0].roles).toEqual({ ip: { DCL: 'wcb' }, oop: { DCL: 'cb' } });
+    expect(r.assignments).toEqual([]);
+    expect(planTarget(r, 'p-Tom', 'ip', 'DCL')).toBe(r);
+    expect(planTarget(team([cb1]), cb1.id, 'ip', 'DCL').players[0].target).toBeUndefined();
+    expect(planTarget(r, 'p-Tom', 'ip', null).players[0].target).toEqual({ slots: { ip: null, oop: 'DCL' } });
+  });
+
+  it('sets the planned role per phase', () => {
+    const t = planTarget(team([target('Tom')]), 'p-Tom', 'ip', 'DCL');
+    const r = setTargetRole(t, 'p-Tom', 'oop', 'scb');
+    expect(r.players[0].roles?.oop?.DCL).toBe('scb');
+    expect(r.players[0].roles?.ip?.DCL).toBe('cb');
+    expect(setTargetRole(r, 'p-Tom', 'oop', 'scb')).toBe(r);
+    expect(setTargetRole(team([target('Tom')]), 'p-Tom', 'ip', 'cb').players[0].roles).toBeUndefined();
+  });
+
+  it('signs as starter: the starter becomes main sub and the main sub aux, all keeping slots and roles', () => {
+    const t = setTargetRole(planTarget(lineup(target('Tom')), 'p-Tom', 'ip', 'DCL'), 'p-Tom', 'ip', 'wcb');
+    const before = snapshot(t);
+    const { team: r, error } = signTarget(t, 'p-Tom', 'starter', 'ip');
+    expect(error).toBeUndefined();
+    expect(t).toEqual(before);
+    expect(r.players.find((p) => p.id === 'p-Tom')?.target).toBeUndefined();
+    expect(at(r, 'ip', 'starter')).toEqual([['p-Tom', 'wcb', null]]);
+    expect(at(r, 'oop', 'starter')).toEqual([['p-Tom', 'cb', null]]);
+    expect(at(r, 'ip', 'main')).toEqual([[cb1.id, 'bpcb', 'p-Tom']]);
+    expect(at(r, 'oop', 'main')).toEqual([[cb1.id, 'ccb', 'p-Tom']]);
+    expect(at(r, 'ip', 'aux')).toEqual([[cb2.id, 'nncb', 'p-Tom']]);
+    expect(at(r, 'oop', 'aux')).toEqual([[cb2.id, 'scb', 'p-Tom']]);
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('keeps the replaced starter\'s role even if it was never remembered', () => {
+    const t = planTarget(team([cb1, target('Tom')], [
+      asg(cb1.id, 'ip', 'starter', 'DCL', 'bpcb'),
+      asg(cb1.id, 'oop', 'starter', 'DCL', 'ccb'),
+    ]), 'p-Tom', 'ip', 'DCL');
+    const r = signTarget(t, 'p-Tom', 'starter', 'ip').team;
+    expect(at(r, 'ip', 'main')).toEqual([[cb1.id, 'bpcb', 'p-Tom']]);
+    expect(at(r, 'oop', 'main')).toEqual([[cb1.id, 'ccb', 'p-Tom']]);
+  });
+
+  it('signs as sub: he becomes main sub and the main sub aux', () => {
+    const t = planTarget(lineup(target('Tom')), 'p-Tom', 'ip', 'DCL');
+    const r = signTarget(t, 'p-Tom', 'sub', 'oop').team;
+    for (const ph of ['ip', 'oop'] as Phase[]) {
+      expect(at(r, ph, 'starter').map((x) => x[0])).toEqual([cb1.id]);
+      expect(at(r, ph, 'main')).toEqual([['p-Tom', 'cb', cb1.id]]);
+      expect(at(r, ph, 'aux').map((x) => x[0])).toEqual([cb2.id]);
+    }
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('signs into an empty slot, or without a plan into the squad only', () => {
+    const planned = planTarget(team([target('Tom')]), 'p-Tom', 'ip', 'DCL');
+    expect(at(signTarget(planned, 'p-Tom', 'starter', 'ip').team, 'oop', 'starter').map((x) => x[0])).toEqual(['p-Tom']);
+    // No starter there: a sub can only be auxiliary.
+    expect(at(signTarget(planned, 'p-Tom', 'sub', 'ip').team, 'ip', 'aux').map((x) => x[0])).toEqual(['p-Tom']);
+    const free = signTarget(team([target('Tom')]), 'p-Tom', 'starter', 'ip').team;
+    expect(free.players[0].target).toBeUndefined();
+    expect(free.assignments).toEqual([]);
+    expect(signTarget(team([cb1]), cb1.id, 'starter', 'ip').team.players[0]).toEqual(cb1);
+  });
+
+  it('fails without changes when the XI has no room', () => {
+    const outfield = SLOTS.filter((s) => s.id !== 'GK' && s.id !== 'DCL').slice(0, 10).map((s) => s.id);
+    const t = planTarget(withXI(outfield, [target('Tom')]), 'p-Tom', 'ip', 'DCL');
+    const r = signTarget(t, 'p-Tom', 'starter', 'ip');
+    expect(r.error).toBe('outfieldFull');
+    expect(r.team).toBe(t);
+  });
+
+  it('copies targets with the team', () => {
+    const t = planTarget(team([target('Tom')]), 'p-Tom', 'ip', 'DCL');
+    expect(copyTeam(t, 'Copy').players[0].target).toEqual({ slots: { ip: 'DCL', oop: 'DCL' } });
+  });
+
+  it('plans a different slot per phase, each with its own role', () => {
+    let t = planTarget(team([target('Tom')]), 'p-Tom', 'ip', 'DCL');
+    t = planTarget(t, 'p-Tom', 'oop', 'DMC');
+    expect(t.players[0].target).toEqual({ slots: { ip: 'DCL', oop: 'DMC' } });
+    expect(t.players[0].roles).toEqual({ ip: { DCL: 'cb' }, oop: { DCL: 'cb', DMC: 'dm' } });
+    expect(setTargetRole(t, 'p-Tom', 'oop', 'sdm').players[0].roles?.oop?.DMC).toBe('sdm');
+  });
+
+  /** Ana starts at DCL and Dani at STC in both phases; Tom is planned at DCL (IP) and STC (OOP). */
+  function split() {
+    const t = team([cb1, st, target('Tom')], [
+      asg(cb1.id, 'ip', 'starter', 'DCL', 'bpcb'), asg(cb1.id, 'oop', 'starter', 'DCL', 'ccb'),
+      asg(st.id, 'ip', 'starter', 'STC', 'p'), asg(st.id, 'oop', 'starter', 'STC', 'cf'),
+    ]);
+    return planTarget(planTarget(t, 'p-Tom', 'ip', 'DCL'), 'p-Tom', 'oop', 'STC');
+  }
+  const slotOf = (t: Team, id: string, ph: Phase, tier: Tier) =>
+    t.assignments.filter((a) => a.playerId === id && a.phase === ph && a.tier === tier).map((a) => a.slot);
+
+  it('signs as starter like promoting a main sub: nobody else changes position', () => {
+    // OOP plan STC is taken by Dani: Tom takes Ana's OOP slot instead of pushing Dani out.
+    const r = signTarget(split(), 'p-Tom', 'starter', 'ip').team;
+    expect(slotOf(r, 'p-Tom', 'ip', 'starter')).toEqual(['DCL']);
+    expect(slotOf(r, 'p-Tom', 'oop', 'starter')).toEqual(['DCL']);
+    expect(slotOf(r, st.id, 'ip', 'starter')).toEqual(['STC']);
+    expect(slotOf(r, st.id, 'oop', 'starter')).toEqual(['STC']);
+    expect(at(r, 'ip', 'main')).toEqual([[cb1.id, 'bpcb', 'p-Tom']]);
+    expect(at(r, 'oop', 'main')).toEqual([[cb1.id, 'ccb', 'p-Tom']]);
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('signs as starter into a different free slot per phase, the starter staying in his own slots as main sub', () => {
+    // Tom: DCL (IP, Ana's slot) and DMC (OOP, free). Ana becomes his main sub at DCL in both phases.
+    const t = planTarget(split(), 'p-Tom', 'oop', 'DMC');
+    const r = signTarget(t, 'p-Tom', 'starter', 'ip').team;
+    expect(slotOf(r, 'p-Tom', 'oop', 'starter')).toEqual(['DMC']);
+    expect(slotOf(r, cb1.id, 'oop', 'main')).toEqual(['DCL']);
+    expect(mainOf(r, 'oop', 'DCL')).toMatchObject({ playerId: cb1.id, role: 'ccb', replaces: 'p-Tom' });
+    expect(starterOf(r, 'oop', 'DCL')).toBeUndefined();
+    expect(slotOf(r, st.id, 'oop', 'starter')).toEqual(['STC']);
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('signs as starter from the phase whose planned slot has a starter to replace', () => {
+    // OOP plan DMC is empty there: signing from the OOP view still replaces Ana (IP, DCL).
+    const t = planTarget(split(), 'p-Tom', 'oop', 'DMC');
+    const r = signTarget(t, 'p-Tom', 'starter', 'oop');
+    expect(r.error).toBeUndefined();
+    expect(slotOf(r.team, 'p-Tom', 'ip', 'starter')).toEqual(['DCL']);
+    expect(slotOf(r.team, 'p-Tom', 'oop', 'starter')).toEqual(['DMC']);
+    expect(isStarter(r.team, cb1.id, 'oop')).toBe(false);
+    expect(invariantErrors(r.team)).toEqual([]);
+  });
+
+  it('signs as sub covering each phase\'s planned starter', () => {
+    const r = signTarget(split(), 'p-Tom', 'sub', 'oop').team;
+    expect(r.assignments.filter((a) => a.playerId === 'p-Tom').map((a) => [a.phase, a.tier, a.slot, a.replaces]).sort()).toEqual([
+      ['ip', 'main', 'DCL', cb1.id],
+      ['oop', 'main', 'STC', st.id],
+    ]);
+    expect(invariantErrors(r)).toEqual([]);
+  });
+});
+
+describe('promoteToStarter', () => {
+  /** Ana starts at DCL, Bea is her main sub and Cris an aux sub there, in both phases. */
+  function bench() {
+    return team([cb1, cb2, cb3], [
+      asg(cb1.id, 'ip', 'starter', 'DCL', 'bpcb'), asg(cb1.id, 'oop', 'starter', 'DCL', 'ccb'),
+      asg(cb2.id, 'ip', 'main', 'DCL', 'nncb', cb1.id), asg(cb2.id, 'oop', 'main', 'DCL', 'scb', cb1.id),
+      asg(cb3.id, 'ip', 'aux', 'DCL', 'cb', cb1.id), asg(cb3.id, 'oop', 'aux', 'DCL', 'cb', cb1.id),
+    ]);
+  }
+  const tiers = (t: Team) =>
+    t.assignments.filter((a) => a.slot === 'DCL').map((a) => [a.playerId, a.phase, a.tier, a.role]).sort();
+
+  it('makes a main sub the starter and the starter his main sub, keeping roles', () => {
+    const t = bench();
+    const before = snapshot(t);
+    const r = promoteToStarter(t, t.assignments[2].id).team;
+    expect(t).toEqual(before);
+    expect(tiers(r)).toEqual([
+      [cb1.id, 'ip', 'main', 'bpcb'], [cb1.id, 'oop', 'main', 'ccb'],
+      [cb2.id, 'ip', 'starter', 'nncb'], [cb2.id, 'oop', 'starter', 'scb'],
+      [cb3.id, 'ip', 'aux', 'cb'], [cb3.id, 'oop', 'aux', 'cb'],
+    ].sort());
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('swaps tiers in place: B (main sub at DCC) starts at DCC, A (starter at DR) becomes main sub at DR', () => {
+    const a = player('A', { DR: 'natural' });
+    const b = player('B', { DC: 'natural' });
+    const t = team([a, b], (['ip', 'oop'] as Phase[]).flatMap((ph) => [
+      asg(a.id, ph, 'starter', 'DR', ph === 'ip' ? 'iwb' : 'fb'),
+      asg(b.id, ph, 'main', 'DCC', ph === 'ip' ? 'bpcb' : 'scb', a.id),
+    ]));
+    const before = snapshot(t);
+    const r = promoteToStarter(t, t.assignments[1].id).team;
+    expect(t).toEqual(before);
+    for (const ph of ['ip', 'oop'] as Phase[]) {
+      expect(starterOf(r, ph, 'DCC')).toMatchObject({ playerId: b.id, role: ph === 'ip' ? 'bpcb' : 'scb' });
+      expect(mainOf(r, ph, 'DR')).toMatchObject({ playerId: a.id, role: ph === 'ip' ? 'iwb' : 'fb', replaces: b.id });
+      expect(starterOf(r, ph, 'DR')).toBeUndefined();
+      expect(startersCount(r, ph)).toBe(1);
+    }
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('swaps in each phase\'s own slots when they differ between phases', () => {
+    const a = player('A', { DR: 'natural', WBR: 'natural' });
+    const b = player('B', { DC: 'natural', DM: 'natural' });
+    const t = team([a, b], [
+      asg(a.id, 'ip', 'starter', 'DR', 'iwb'), asg(a.id, 'oop', 'starter', 'WBR', 'hwb'),
+      asg(b.id, 'ip', 'main', 'DCC', 'bpcb', a.id), asg(b.id, 'oop', 'main', 'DMC', 'sdm', a.id),
+    ]);
+    const r = promoteToStarter(t, t.assignments[3].id).team;
+    expect(starterOf(r, 'ip', 'DCC')?.playerId).toBe(b.id);
+    expect(starterOf(r, 'oop', 'DMC')?.playerId).toBe(b.id);
+    expect(mainOf(r, 'ip', 'DR')).toMatchObject({ playerId: a.id, role: 'iwb' });
+    expect(mainOf(r, 'oop', 'WBR')).toMatchObject({ playerId: a.id, role: 'hwb' });
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('drops a main sub already in the starter\'s slot (covering someone else) to aux', () => {
+    const a = player('A', { DR: 'natural' });
+    const b = player('B', { DC: 'natural' });
+    const c = player('C', { DR: 'natural' });
+    const t = team([a, b, c, cb1], (['ip', 'oop'] as Phase[]).flatMap((ph) => [
+      asg(a.id, ph, 'starter', 'DR', 'fb'),
+      asg(cb1.id, ph, 'starter', 'DCL', 'cb'),
+      asg(b.id, ph, 'main', 'DCC', 'cb', a.id),
+      asg(c.id, ph, 'main', 'DR', ph === 'ip' ? 'wb' : 'pfb', cb1.id),
+    ]));
+    const r = promoteToStarter(t, t.assignments[2].id).team;
+    for (const ph of ['ip', 'oop'] as Phase[]) {
+      expect(mainOf(r, ph, 'DR')?.playerId).toBe(a.id);
+      expect(auxOf(r, ph, 'DR').map((x) => [x.playerId, x.role])).toEqual([[c.id, ph === 'ip' ? 'wb' : 'pfb']]);
+    }
+    expect(invariantErrors(r)).toEqual([]);
+  });
+
+  it('does not promote auxiliary subs to starter', () => {
+    const t = bench();
+    expect(promoteToStarter(t, t.assignments[4].id).team).toBe(t);
+  });
+
+  it('keeps every other starter where he was', () => {
+    const src = sampleTeam('Promote');
+    const starts = (t: Team, skip: string[]) =>
+      t.assignments.filter((a) => a.tier === 'starter' && !skip.includes(a.playerId)).map((a) => [a.playerId, a.phase, a.slot]).sort();
+    const mains = src.assignments.filter((a) => a.tier === 'main' && a.replaces);
+    expect(mains.length).toBeGreaterThan(0);
+    for (const sub of mains) {
+      const r = promoteToStarter(src, sub.id);
+      expect(r.error).toBeUndefined();
+      expect(invariantErrors(r.team)).toEqual([]);
+      expect(startersCount(r.team, sub.phase)).toBe(startersCount(src, sub.phase));
+      expect(starts(r.team, [sub.playerId, sub.replaces!])).toEqual(starts(src, [sub.playerId, sub.replaces!]));
+    }
+  });
+
+  it('ignores starters and fails without changes when the XI is full', () => {
+    const t = bench();
+    expect(promoteToStarter(t, t.assignments[0].id).team).toBe(t);
+    const outfield = SLOTS.filter((s) => s.id !== 'GK' && s.id !== 'DCR').slice(0, 10).map((s) => s.id);
+    const full = withXI(outfield, [cb2], [asg(cb2.id, 'ip', 'main', 'DCR')]);
+    const r = promoteToStarter(full, full.assignments.at(-1)!.id);
+    expect(r.error).toBe('outfieldFull');
+    expect(r.team).toBe(full);
+  });
+});
+
 describe('lineup rules hold under random edits', () => {
   it('never breaks the invariants', () => {
     const rand = rng(42);
@@ -724,10 +1004,18 @@ describe('lineup rules hold under random edits', () => {
         t = moveAssignment(t, pick(t.assignments).id, pick(slots)).team;
       } else if (op < 0.85 && t.assignments.length) {
         t = promoteToMain(t, pick(t.assignments).id);
-      } else if (op < 0.9 && t.assignments.length) {
+      } else if (op < 0.88 && t.assignments.length) {
         t = setReplaces(t, pick(t.assignments).id, pick(t.players).id);
-      } else if (t.assignments.length) {
+      } else if (op < 0.92 && t.assignments.length) {
         t = removeAssignment(t, pick(t.assignments).id);
+      } else if (op < 0.94) {
+        t = upsertPlayer(t, { ...player(`T${i}`, { DC: 'natural', MC: 'competent' }), target: { slots: { ip: null, oop: null } } });
+      } else if (op < 0.97) {
+        t = planTarget(t, pick(t.players).id, pick(phases), rand() < 0.1 ? null : pick(slots));
+      } else if (op < 0.985) {
+        t = signTarget(t, pick(t.players).id, rand() < 0.5 ? 'starter' : 'sub', pick(phases)).team;
+      } else if (t.assignments.length) {
+        t = promoteToStarter(t, pick(t.assignments).id).team;
       }
       const errors = invariantErrors(t);
       if (errors.length) throw new Error(`step ${i}: ${errors.join('; ')}`);
