@@ -28,13 +28,13 @@ afterEach(() => {
 
 function validData(): AppData {
   const team = sampleTeam('Test');
-  return { version: 2, settings: { lang: 'es' }, teams: [team], activeTeamId: team.id };
+  return { version: 3, settings: { lang: 'es' }, teams: [team], activeTeamId: team.id };
 }
 
 describe('defaultData', () => {
   it('starts with one empty team that is active', () => {
     const d = defaultData();
-    expect(d.version).toBe(2);
+    expect(d.version).toBe(3);
     expect(d.teams).toHaveLength(1);
     expect(d.activeTeamId).toBe(d.teams[0].id);
     expect(d.teams[0].players).toEqual([]);
@@ -46,6 +46,36 @@ describe('parseData', () => {
   it('round-trips a valid export unchanged', () => {
     const data = validData();
     expect(parseData(JSON.parse(JSON.stringify(data)))).toEqual(data);
+  });
+
+  it('imports v2 exports (no transfer targets) as v3', () => {
+    const data = validData();
+    const parsed = parseData({ ...JSON.parse(JSON.stringify(data)), version: 2 });
+    expect(parsed).toEqual(data);
+  });
+
+  it('keeps transfer targets, validates their plan and drops their assignments', () => {
+    const parsed = parseData({
+      version: 3,
+      teams: [{
+        id: 't', name: 'T',
+        players: [
+          { id: 'a', name: 'Planned', positions: {}, target: { slots: { ip: 'DCL', oop: 'DMC' } } },
+          { id: 'b', name: 'Bad slot', positions: {}, target: { slots: { ip: 'XX', oop: 7 } } },
+          { id: 'c', name: 'Not a target', positions: {}, target: 'yes' },
+          { id: 'd', name: 'One slot', positions: {}, target: { slot: 'STC' } },
+        ],
+        assignments: [{ id: 'x', playerId: 'a', phase: 'ip', tier: 'aux', slot: 'DCL', role: null }],
+      }],
+    });
+    const players = parsed!.teams[0].players;
+    expect(players.map((p) => p.target)).toEqual([
+      { slots: { ip: 'DCL', oop: 'DMC' } },
+      { slots: { ip: null, oop: null } },
+      undefined,
+      { slots: { ip: 'STC', oop: 'STC' } },
+    ]);
+    expect(parsed!.teams[0].assignments).toEqual([]);
   });
 
   it('rejects things that are not exports', () => {

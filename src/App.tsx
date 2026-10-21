@@ -4,11 +4,12 @@ import { Header } from './components/Header';
 import { Icon } from './components/Icon';
 import { Pitch } from './components/Pitch';
 import { PlayerEditor } from './components/PlayerEditor';
+import { SignDialog } from './components/SignDialog';
 import { SlotPanel } from './components/SlotPanel';
 import { SquadList } from './components/SquadList';
 import { sampleTeam } from './data/sample';
 import {
-  assignPlayer, MAX_STARTERS, moveAssignment, startersCount, type LogicError,
+  assignPlayer, isTarget, MAX_STARTERS, moveAssignment, planTarget, squadPlayers, startersCount, type LogicError,
 } from './domain/logic';
 import type { Phase, SlotId, Tier, View } from './domain/types';
 import { I18nProvider, useI18n } from './i18n/I18n';
@@ -35,7 +36,7 @@ function Localized() {
 }
 
 type Toast = { id: number; msg: string; kind: 'ok' | 'error' };
-type Editor = { playerId: string | null; image?: Blob } | null;
+type Editor = { playerId: string | null; image?: Blob; asTarget?: boolean } | null;
 
 function Main() {
   const { team, updateTeam, undo, redo } = useStore();
@@ -45,6 +46,7 @@ function Main() {
   const [panelSlot, setPanelSlot] = useState<SlotId | null>(null);
   const [placing, setPlacing] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor>(null);
+  const [signing, setSigning] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'pitch' | 'squad'>('pitch');
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -65,6 +67,8 @@ function Main() {
     (playerId: string, slot: SlotId, assignmentId?: string, openPanel = true) => {
       let error: LogicError | undefined;
       updateTeam((tm) => {
+        // A transfer target isn't in the lineup: placing him plans where he would play.
+        if (isTarget(tm, playerId)) return planTarget(tm, playerId, phase, slot);
         const a = assignmentId ? tm.assignments.find((x) => x.id === assignmentId) : undefined;
         const sameLayer = a && a.phase === phase && (view === 'starters' ? a.tier === 'starter' : a.tier !== 'starter');
         const r = sameLayer ? moveAssignment(tm, a!.id, slot) : assignPlayer(tm, playerId, phase, slot, tierForView);
@@ -126,6 +130,7 @@ function Main() {
 
   const placingPlayer = placing ? team.players.find((p) => p.id === placing) : undefined;
   const count = startersCount(team, phase);
+  const squadSize = squadPlayers(team).length;
 
   return (
     <DndProvider onDrop={onDrop}>
@@ -153,7 +158,7 @@ function Main() {
               </span>
             </div>
 
-            {team.players.length === 0 && (
+            {squadSize === 0 && (
               <div className="pitch-empty">
                 <span className="grow muted">{t('emptySquadText')}</span>
                 <button type="button" className="btn btn--primary btn--sm" onClick={() => setEditor({ playerId: null })}>
@@ -189,7 +194,9 @@ function Main() {
               phase={phase}
               view={view}
               onAdd={() => setEditor({ playerId: null })}
+              onAddTarget={() => setEditor({ playerId: null, asTarget: true })}
               onEdit={(id) => setEditor({ playerId: id })}
+              onSign={setSigning}
               onPlace={(id) => {
                 setPlacing(id);
                 setMobileTab('pitch');
@@ -199,7 +206,7 @@ function Main() {
           </section>
 
           {panelSlot && (
-            <SlotPanel phase={phase} view={view} slot={panelSlot} onClose={() => setPanelSlot(null)} onError={onError} />
+            <SlotPanel phase={phase} view={view} slot={panelSlot} onClose={() => setPanelSlot(null)} onError={onError} onSign={setSigning} />
           )}
         </main>
 
@@ -208,7 +215,7 @@ function Main() {
             <Icon name="field" size={20} /> {t('pitch')}
           </button>
           <button type="button" className="tab" aria-current={mobileTab === 'squad' ? 'page' : undefined} onClick={() => setMobileTab('squad')}>
-            <Icon name="users" size={20} /> {t('squad')} <span className="count">{team.players.length}</span>
+            <Icon name="users" size={20} /> {t('squad')} <span className="count">{squadSize}</span>
           </button>
         </nav>
 
@@ -216,7 +223,25 @@ function Main() {
           {toast && <div key={toast.id} className={`toast toast--${toast.kind}`}>{toast.msg}</div>}
         </div>
 
-        {editor && <PlayerEditor key={editor.playerId ?? 'new'} playerId={editor.playerId} image={editor.image} onClose={() => setEditor(null)} onError={onError} />}
+        {editor && (
+          <PlayerEditor
+            key={editor.playerId ?? 'new'}
+            playerId={editor.playerId}
+            image={editor.image}
+            asTarget={editor.asTarget}
+            onClose={() => setEditor(null)}
+            onError={onError}
+          />
+        )}
+        {signing && (
+          <SignDialog
+            playerId={signing}
+            phase={phase}
+            onClose={() => setSigning(null)}
+            onSigned={(name) => showToast(t('signed', { name }))}
+            onError={onError}
+          />
+        )}
       </div>
     </DndProvider>
   );

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  assignPlayer, auxOf, canPlay, familiarityAt, isStarter, mainOf, promoteToMain, removeAssignment,
-  setRole, sortByFamiliarity, starterOf, type LogicError,
+  assignPlayer, auxOf, canPlay, familiarityAt, isStarter, mainOf, planTarget, promoteToMain, promoteToStarter, removeAssignment,
+  setRole, setTargetRole, sortByFamiliarity, squadPlayers, starterOf, targetPlayers, type LogicError,
 } from '../domain/logic';
 import { SLOT_BY_ID } from '../domain/positions';
 import { matchesQuery } from '../domain/search';
@@ -21,6 +21,8 @@ interface Props {
   slot: SlotId;
   onClose: () => void;
   onError: (e: LogicError) => void;
+  /** Opens the sign dialog for a transfer target. */
+  onSign: (playerId: string) => void;
 }
 
 function statusLabel(team: Team, playerId: string, phase: Phase, t: (k: StringKey) => string, pos: (c: PosCode) => string): string {
@@ -33,7 +35,7 @@ function statusLabel(team: Team, playerId: string, phase: Phase, t: (k: StringKe
   return '';
 }
 
-export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
+export function SlotPanel({ phase, view, slot, onClose, onError, onSign }: Props) {
   const { team, updateTeam } = useStore();
   const { t, pos } = useI18n();
   const [showAll, setShowAll] = useState(false);
@@ -51,7 +53,7 @@ export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
   );
 
   const candidates = useMemo(() => {
-    const list = team.players.filter(
+    const list = squadPlayers(team).filter(
       (p) => !assignedIds.has(p.id) && (showAll || canPlay(p, phase, slot)) && matchesQuery(p.name, query),
     );
     return sortByFamiliarity(list, phase, slot);
@@ -68,8 +70,21 @@ export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
     if (error) onError(error);
   };
 
+  // Main sub → starter: he and the starter he replaces swap tiers, each in his own slot.
+  const makeStarter = (assignmentId: string) => {
+    let error: LogicError | undefined;
+    updateTeam((tm) => {
+      const r = promoteToStarter(tm, assignmentId);
+      error = r.error;
+      return r.team;
+    });
+    if (error) onError(error);
+  };
+
   const title = `${pos(def.pos)}`;
   const subtitle = `${t(phase === 'ip' ? 'inPossession' : 'outOfPossession')} · ${t(view === 'starters' ? 'starters' : 'subs')}`;
+
+  const targets = targetPlayers(team).filter((p) => p.target?.slots[phase] === slot);
 
   const assignedRows: Assignment[] = view === 'starters' ? (starter ? [starter] : []) : [main, ...aux].filter((a): a is Assignment => !!a);
 
@@ -100,6 +115,11 @@ export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
                       onChange={(role) => updateTeam((tm) => setRole(tm, a.id, role))}
                     />
                     {a.tier !== 'starter' && <ReplaceSelect assignment={a} />}
+                    {a.tier === 'main' && (
+                      <button type="button" className="btn btn--ghost" onClick={() => makeStarter(a.id)}>
+                        <Icon name="arrowUp" /> {t('makeStarter')}
+                      </button>
+                    )}
                     {a.tier === 'aux' && !!starter && !isStarter(team, a.playerId, phase) && (
                       <button type="button" className="btn btn--ghost" onClick={() => updateTeam((tm) => promoteToMain(tm, a.id))}>
                         <Icon name="arrowUp" /> {t('makeMain')}
@@ -119,6 +139,38 @@ export function SlotPanel({ phase, view, slot, onClose, onError }: Props) {
           </ul>
         )}
       </section>
+
+      {targets.length > 0 && (
+        <section className="panel-section">
+          <h3 className="section-title">
+            <span className="target-chip"><Icon name="star" size={14} /></span> {t('targetsHere')}
+          </h3>
+          <ul className="assigned-list">
+            {targets.map((p) => (
+              <li key={p.id} className="assigned-row">
+                <div className="assigned-head">
+                  <FamDot level={familiarityAt(p, phase, slot)} />
+                  <span className="grow truncate strong">{p.name}</span>
+                </div>
+                <div className="assigned-controls">
+                  <RoleSelect
+                    phase={phase}
+                    pos={def.pos}
+                    value={p.roles?.[phase]?.[slot] ?? null}
+                    onChange={(role) => updateTeam((tm) => setTargetRole(tm, p.id, phase, role))}
+                  />
+                  <button type="button" className="btn btn--ghost" onClick={() => onSign(p.id)}>
+                    <Icon name="userCheck" /> {t('sign')}
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--danger" onClick={() => updateTeam((tm) => planTarget(tm, p.id, phase, null))}>
+                    <Icon name="x" /> {t('removeFromPosition')}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="panel-section">
         <h3 className="section-title">{t('candidates')}</h3>

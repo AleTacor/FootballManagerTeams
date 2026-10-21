@@ -16,14 +16,17 @@ interface Props {
   playerId: string | null; // null = new player
   /** Screenshot to read straight away (pasted on the main screen). */
   image?: Blob;
+  /** New player as a transfer target (not in the squad yet). */
+  asTarget?: boolean;
   onClose: () => void;
   onError: (e: LogicError) => void;
 }
 
-export function PlayerEditor({ playerId, image, onClose, onError }: Props) {
+export function PlayerEditor({ playerId, image, asTarget, onClose, onError }: Props) {
   const { team, updateTeam } = useStore();
   const { t } = useI18n();
   const existing = playerId ? team.players.find((p) => p.id === playerId) : undefined;
+  const isTarget = existing ? !!existing.target : !!asTarget;
 
   const [name, setName] = useState(existing?.name ?? '');
   // One map for both phases: FM26 positions don't change with the phase, only roles do.
@@ -46,6 +49,7 @@ export function PlayerEditor({ playerId, image, onClose, onError }: Props) {
       name: name.trim(),
       positions: { ip: { ...positions }, oop: { ...positions } },
       ...(existing?.roles && { roles: existing.roles }),
+      ...(isTarget && { target: existing?.target ?? { slots: { ip: null, oop: null } } }),
     };
     updateTeam((tm) => upsertPlayer(tm, player));
     onClose();
@@ -54,8 +58,8 @@ export function PlayerEditor({ playerId, image, onClose, onError }: Props) {
   if (confirmDelete && existing) {
     return (
       <ConfirmDialog
-        message={t('removePlayerConfirm', { name: existing.name })}
-        confirmLabel={t('removePlayer')}
+        message={t(isTarget ? 'removeTargetConfirm' : 'removePlayerConfirm', { name: existing.name })}
+        confirmLabel={t(isTarget ? 'removeTarget' : 'removePlayer')}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => {
           updateTeam((tm) => removePlayer(tm, existing.id));
@@ -67,13 +71,13 @@ export function PlayerEditor({ playerId, image, onClose, onError }: Props) {
 
   return (
     <Modal
-      title={existing ? t('editPlayer') : t('addPlayer')}
+      title={t(isTarget ? (existing ? 'editTarget' : 'addTarget') : existing ? 'editPlayer' : 'addPlayer')}
       onClose={onClose}
       footer={
         <>
           {existing && (
             <button type="button" className="btn btn--ghost btn--danger push-left" onClick={() => setConfirmDelete(true)}>
-              <Icon name="trash" /> {t('removePlayer')}
+              <Icon name="trash" /> {t(isTarget ? 'removeTarget' : 'removePlayer')}
             </button>
           )}
           <button type="button" className="btn btn--ghost" onClick={onClose}>{t('cancel')}</button>
@@ -117,7 +121,7 @@ export function PlayerEditor({ playerId, image, onClose, onError }: Props) {
         <PositionPicker idPrefix="fam" value={positions} onChange={setPositions} />
       </div>
 
-      {existing && <AssignmentsEditor player={existing} positions={both} onError={onError} />}
+      {existing && !isTarget && <AssignmentsEditor player={existing} positions={both} onError={onError} />}
     </Modal>
   );
 }

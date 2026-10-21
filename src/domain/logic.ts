@@ -1,6 +1,6 @@
 import { FAMILIARITY_RANK, SLOT_BY_ID, SLOTS } from './positions';
 import { defaultRole, roleFits } from './roles';
-import type { Assignment, Familiarity, Phase, Player, SlotId, Team, Tier } from './types';
+import type { Assignment, Familiarity, Phase, Player, SignAs, SlotId, Team, Tier } from './types';
 
 export const MAX_STARTERS = 11;
 /** Outfield starters per phase: the 11th place is the goalkeeper's (the GK slot). */
@@ -33,6 +33,20 @@ function clone(team: Team): Team {
 export function familiarityAt(player: Player | undefined, phase: Phase, slot: SlotId): Familiarity | null {
   if (!player) return null;
   return player.positions[phase][SLOT_BY_ID[slot].pos] ?? null;
+}
+
+/** Transfer targets aren't in the squad yet: they never get lineup assignments. */
+export function isTarget(team: Team, playerId: string): boolean {
+  return !!team.players.find((p) => p.id === playerId)?.target;
+}
+
+/** Players in the squad, without transfer targets. */
+export function squadPlayers(team: Team): Player[] {
+  return team.players.filter((p) => !p.target);
+}
+
+export function targetPlayers(team: Team): Player[] {
+  return team.players.filter((p) => p.target);
 }
 
 export function canPlay(player: Player, phase: Phase, slot: SlotId): boolean {
@@ -375,6 +389,8 @@ function finish(src: Team, next: Team, prefer: string[] = []): Team {
  */
 export function linkLineup(src: Team): Team {
   const team = clone(src);
+  // Transfer targets aren't in the squad: they have no place in the lineup.
+  team.assignments = team.assignments.filter((a) => !isTarget(team, a.playerId));
   // At most 10 outfield starters per phase (older data could have 11): drop the extra ones.
   for (const phase of PHASES) {
     const outfield = team.assignments.filter((a) => a.phase === phase && a.tier === 'starter' && a.slot !== GK);
@@ -403,6 +419,7 @@ export function assignPlayer(src: Team, playerId: string, phase: Phase, slot: Sl
 }
 
 function assign(src: Team, playerId: string, phase: Phase, slot: SlotId, tier: Tier): Result {
+  if (isTarget(src, playerId)) return { team: src };
   const team = clone(src);
 
   if (tier === 'starter') {
@@ -598,6 +615,185 @@ export function setReplaces(src: Team, assignmentId: string, starterId: string |
   return finish(src, team, prefer);
 }
 
+/**
+ * Plans where a transfer target would play in one phase (null: nowhere). If the other phase
+ * has no plan yet, it gets the same slot. In each phase whose slot changes he gets his
+ * remembered role for that slot, else the FM26 default, like a player arriving there.
+ */
+export function planTarget(src: Team, playerId: string, phase: Phase, slot: SlotId | null): Team {
+  const p = src.players.find((x) => x.id === playerId);
+  if (!p?.target) return src;
+  const was = p.target.slots;
+  const slots = { ...was, [phase]: slot };
+  if (slot && !slots[other(phase)]) slots[other(phase)] = slot;
+  if (slots.ip === was.ip && slots.oop === was.oop) return src;
+  const team = clone(src);
+  team.players.find((x) => x.id === playerId)!.target = { slots };
+  for (const ph of PHASES) {
+    const at = slots[ph];
+    if (at && at !== was[ph]) settle(team, { id: '', playerId, phase: ph, slot: at, tier: 'aux', role: null, replaces: null });
+  }
+  return team;
+}
+
+/** Sets a transfer target's planned role for one phase (remembered for his planned slot there). */
+export function setTargetRole(src: Team, playerId: string, phase: Phase, role: string | null): Team {
+  const p = src.players.find((x) => x.id === playerId);
+  const slot = p?.target?.slots[phase];
+  if (!p || !slot || (p.roles?.[phase]?.[slot] ?? null) === role) return src;
+  const team = clone(src);
+  remember(team, { id: '', playerId, phase, slot, tier: 'aux', role, replaces: null });
+  return team;
+}
+
+/** Main subs of `phase` who cover `starterId` or play in `slot` drop to auxiliary (they keep slot, role and link). */
+function demoteMains(team: Team, phase: Phase, starterId: string, slot: SlotId) {
+  for (const a of team.assignments) {
+    if (a.phase === phase && a.tier === 'main' && (a.replaces === starterId || a.slot === slot)) a.tier = 'aux';
+  }
+}
+
+/**
+ * Puts a player into the lineup at `slots[phase]` where there's no starter to swap with
+ * (for that, see takeOver). Used by signTarget and promoteToStarter.
+ * - starter: he starts there (if the XI has room); in the other phase he goes where the
+ *   linking puts him, or to `slots[other]` if it's free. Nobody else moves.
+ * - sub: in each phase with a slot, the main subs who cover that slot's starter (or play there)
+ *   become aux and he becomes the main sub; with nobody starting there he's added as aux.
+ * Fails like assignPlayer (XI full).
+ */
+function stepIn(src: Team, team: Team, playerId: string, phase: Phase, slots: Record<Phase, SlotId | null>, as: SignAs): Result {
+  const slot = slots[phase]!;
+  const q = other(phase);
+  if (as === 'sub') {
+    for (const ph of PHASES) {
+      const start = slots[ph] && starterOf(team, ph, slots[ph]!);
+      if (start) demoteMains(team, ph, start.playerId, slots[ph]!);
+    }
+    const r = assign(team, playerId, phase, slot, 'main');
+    if (r.error) return { team: src, error: r.error };
+    let next = r.team;
+    if (slots[q] && !isMainSub(next, playerId, q)) next = assign(next, playerId, q, slots[q]!, 'main').team;
+    const placed = next.assignments.filter((a) => a.playerId === playerId && a.tier === 'main').map((a) => a.id);
+    return { team: finish(src, next, placed) };
+  }
+  // A sub stepping up in the slot he plays in keeps his role there.
+  for (const a of team.assignments) {
+    if (a.playerId === playerId && a.role && a.slot === slots[a.phase]) remember(team, a);
+  }
+  const r = assign(team, playerId, phase, slot, 'starter');
+  if (r.error) return { team: src, error: r.error };
+  let next = r.team;
+  // In the other phase he moves to his slot there only if it's free: nobody else is moved.
+  const mine = starterAssignment(next, playerId, q);
+  if (slots[q] && mine && mine.slot !== slots[q] && !starterOf(next, q, slots[q]!)) {
+    const m = move(next, mine.id, slots[q]!);
+    if (!m.error) next = m.team;
+  }
+  return { team: finish(src, next) };
+}
+
+/**
+ * Player `x` takes starter `y`'s place by swapping tiers, in both phases, without moving
+ * anyone else: x starts in his own spot (`spotOf(phase)`) and y becomes his main sub in y's
+ * own slot, each keeping his role there. y's old slot is left empty when x's spot is another
+ * one. Main subs who covered y (or played in his slot) drop to aux there. In a phase where x
+ * has no spot, or someone else starts in it, or it would put a different player in goal, x
+ * takes y's slot instead (and y becomes main sub in x's sub spot, if x had one, else in his
+ * own slot). Used by promoteToStarter (x's spot: his main sub assignment) and signTarget
+ * (his planned slot).
+ */
+function takeOver(src: Team, team: Team, x: string, y: string, spotOf: (ph: Phase) => { slot: SlotId; a?: Assignment } | undefined): Result {
+  const placed: string[] = [];
+  const add = (playerId: string, ph: Phase, slot: SlotId, tier: Tier, role: string | null, replaces: string | null) => {
+    dropSameSlot(team, playerId, ph, slot);
+    const added: Assignment = { id: uid(), playerId, phase: ph, slot, tier, role, replaces };
+    settle(team, added);
+    team.assignments.push(added);
+    return added;
+  };
+  for (const ph of PHASES) {
+    const ys = starterAssignment(team, y, ph);
+    if (!ys) continue;
+    const spot = spotOf(ph);
+    for (const s of team.assignments) {
+      if (s !== spot?.a && s.phase === ph && s.tier === 'main' && (s.replaces === y || s.slot === ys.slot)) s.tier = 'aux';
+    }
+    // A sub stepping up in the slot he plays in keeps his role there.
+    if (spot?.a?.role) remember(team, spot.a);
+    const taken = spot && starterOf(team, ph, spot.slot);
+    const keeper = spot && (spot.slot === GK) !== (ys.slot === GK);
+    const inPlace = !!spot && !keeper && (!taken || taken.playerId === y);
+    const startAt = inPlace ? spot!.slot : ys.slot;
+    const subAt = inPlace || keeper || !spot?.a ? ys.slot : spot.a.slot;
+    const xRole = spot?.a?.slot === startAt ? spot.a.role : null;
+    const yRole = ys.slot === subAt ? ys.role : null;
+    team.assignments = team.assignments.filter((s) => s !== ys && s !== spot?.a);
+    add(x, ph, startAt, 'starter', xRole, null);
+    transferLinks(team, ph, y, x);
+    // Another main sub already playing in that slot (for someone else) drops to aux there.
+    const there = mainOf(team, ph, subAt);
+    if (there && there.playerId !== y) there.tier = 'aux';
+    placed.push(add(y, ph, subAt, 'main', yRole, x).id);
+  }
+  return { team: finish(src, team, placed) };
+}
+
+/**
+ * Signs a transfer target: he joins the squad. With a planned slot he also joins the lineup,
+ * starting from `phase` (or the phase that has a plan):
+ * - as starter: like promoting a main sub (see takeOver), he swaps with the starter of his
+ *   planned slot: he starts in his planned slot in each phase and that starter becomes his
+ *   main sub in his own slot; that starter's main subs become auxiliary. Nobody else moves.
+ * - as sub: he becomes the main sub for the starter of his planned slot in each phase, and
+ *   the main subs who covered that starter become auxiliary subs (see stepIn).
+ * With nobody starting in the slot he just starts there (if the XI has room), or is added
+ * as an auxiliary sub (main subs only go where a starter plays).
+ */
+export function signTarget(src: Team, playerId: string, as: SignAs, phase: Phase): Result {
+  const p = src.players.find((x) => x.id === playerId);
+  if (!p?.target) return { team: src };
+  const slots = p.target.slots;
+  const team = clone(src);
+  delete team.players.find((x) => x.id === playerId)!.target;
+  // Start from `phase`, unless only the other phase has a plan, or (as starter) only the
+  // other phase's planned slot has a starter to replace (an empty slot would need a 12th).
+  const replaceable = (ph: Phase) => !!slots[ph] && !!starterOf(team, ph, slots[ph]!);
+  const from = !slots[phase] || (as === 'starter' && !replaceable(phase) && replaceable(other(phase))) ? other(phase) : phase;
+  if (!slots[from]) return { team };
+  const replaced = as === 'starter' ? starterOf(team, from, slots[from]!)?.playerId ?? null : null;
+  if (replaced) return takeOver(src, team, playerId, replaced, (ph) => (slots[ph] ? { slot: slots[ph]! } : undefined));
+  return stepIn(src, team, playerId, from, slots, as);
+}
+
+/**
+ * Makes a main sub a starter by swapping tiers with the starter he replaces (else the starter
+ * of his slot), in both phases, without moving anyone else (see takeOver): he starts in his
+ * own main sub spot and that starter becomes his main sub in his own slot. A main sub with no
+ * starter to swap with just starts in his slot, like a new starter (see stepIn).
+ * Auxiliary subs can't be promoted to starter (only to main sub: promoteToMain).
+ */
+export function promoteToStarter(src: Team, assignmentId: string): Result {
+  const a = src.assignments.find((x) => x.id === assignmentId);
+  if (!a || a.tier !== 'main' || isStarter(src, a.playerId, a.phase)) return { team: src };
+  const x = a.playerId;
+  const q = other(a.phase);
+  const y = (a.replaces && isStarter(src, a.replaces, a.phase) ? a.replaces : null) ?? starterOf(src, a.phase, a.slot)?.playerId ?? null;
+  if (!y) {
+    const mains = src.assignments.filter((s) => s.playerId === x && s.phase === q && s.tier === 'main');
+    const mirror = mains.find((s) => s.replaces === a.replaces) ?? mains[0];
+    const slots = { [a.phase]: a.slot, [q]: mirror?.slot ?? null } as Record<Phase, SlotId | null>;
+    return stepIn(src, clone(src), x, a.phase, slots, 'starter');
+  }
+  const team = clone(src);
+  // His main sub spot in each phase: the promoted one, else the one for the same starter.
+  return takeOver(src, team, x, y, (ph) => {
+    const mine = team.assignments.filter((s) => s.playerId === x && s.phase === ph && s.tier === 'main');
+    const s = ph === a.phase ? mine.find((m) => m.id === a.id) : mine.find((m) => m.replaces === y) ?? mine[0];
+    return s && { slot: s.slot, a: s };
+  });
+}
+
 export function upsertPlayer(src: Team, player: Player): Team {
   const team = clone(src);
   const i = team.players.findIndex((p) => p.id === player.id);
@@ -630,6 +826,7 @@ export function copyTeam(src: Team, name: string): Team {
     id: ids.get(p.id)!,
     positions: { ip: { ...p.positions.ip }, oop: { ...p.positions.oop } },
     ...(p.roles && { roles: Object.fromEntries(Object.entries(p.roles).map(([ph, bySlot]) => [ph, { ...bySlot }])) }),
+    ...(p.target && { target: { ...p.target } }),
   }));
   const assignments = src.assignments.map((a) => ({
     ...a,

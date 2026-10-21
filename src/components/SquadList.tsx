@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FAMILIARITY_RANK, mergePositions, POS_CODES, POS_GROUP, SLOT_BY_ID } from '../domain/positions';
+import { useMemo, useState } from 'react';
+import { mergePositions, SLOT_BY_ID } from '../domain/positions';
 import { roleAbbr } from '../domain/roles';
 import { matchesQuery } from '../domain/search';
-import { isStarter, removePlayer } from '../domain/logic';
-import type { Assignment, Phase, Player, PositionMap, Team, View } from '../domain/types';
+import { isStarter, removePlayer, squadPlayers, targetPlayers } from '../domain/logic';
+import type { Assignment, Phase, Player, Team, View } from '../domain/types';
 import { useI18n } from '../i18n/I18n';
 import { useStore } from '../state/store';
 import { useDnd } from './dnd';
 import { Icon } from './Icon';
 import { ConfirmDialog } from './Modal';
 import { shortName } from './names';
+import { CopyNameButton, PosBadges } from './PlayerCells';
+import { TargetList } from './TargetList';
 
-type Filter = 'all' | 'starters' | 'subs' | 'none';
+type Status = 'starters' | 'subs' | 'none';
+const STATUSES: Status[] = ['starters', 'subs', 'none'];
+const STATUS_LABEL = { starters: 'filterStarters', subs: 'filterSubs', none: 'filterNone' } as const;
 type SortKey = 'name' | Phase;
 
 interface Props {
@@ -19,10 +23,14 @@ interface Props {
   /** Pitch view: in the subs view, starters of this phase can't be dragged or placed (no starter is a main sub). */
   view: View;
   onAdd: () => void;
+  onAddTarget: () => void;
   onEdit: (id: string) => void;
   onPlace: (id: string) => void;
+  onSign: (id: string) => void;
   onLoadExample: () => void;
 }
+
+type ListKind = 'squad' | 'targets';
 
 const TIER_RANK = { starter: 0, main: 1, aux: 2 } as const;
 
@@ -32,26 +40,34 @@ function bestTier(team: Team, pid: string, phase?: Phase): number {
   return ranks.length ? Math.min(...ranks) : 3;
 }
 
-export function SquadList({ phase, view, onAdd, onEdit, onPlace, onLoadExample }: Props) {
+export function SquadList({ phase, view, onAdd, onAddTarget, onEdit, onPlace, onSign, onLoadExample }: Props) {
   const { team, updateTeam } = useStore();
   const { t } = useI18n();
   const [query, setQuery] = useState('');
+  const [list, setList] = useState<ListKind>('squad');
+  const squad = squadPlayers(team);
+  const targetCount = targetPlayers(team).length;
   const [removing, setRemoving] = useState<Player | null>(null);
-  // One filter per pitch view, kept for the session: the subs view starts on "Subs", and
-  // whatever the user picks in a view comes back when they return to it.
-  const [filters, setFilters] = useState<Record<View, Filter>>({ starters: 'all', subs: 'subs' });
+  // One status filter per pitch view, kept for the session: the subs view starts on Subs +
+  // Unassigned (the candidates for the bench), and whatever the user picks in a view comes
+  // back when they return to it. Statuses combine; all three selected means "All".
+  const [filters, setFilters] = useState<Record<View, Status[]>>({ starters: STATUSES, subs: ['subs', 'none'] });
   const filter = filters[view];
-  const setFilter = (f: Filter) => setFilters((prev) => ({ ...prev, [view]: f }));
+  const showAll = filter.length === STATUSES.length;
+  const setFilter = (f: Status[]) => setFilters((prev) => ({ ...prev, [view]: f }));
+  // From "All", a status shows only that one; otherwise it toggles (none left = All again).
+  const toggleStatus = (st: Status) => {
+    if (showAll) return setFilter([st]);
+    const next = filter.includes(st) ? filter.filter((f) => f !== st) : STATUSES.filter((f) => f === st || filter.includes(f));
+    setFilter(next.length ? next : STATUSES);
+  };
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: phase, dir: 1 });
 
   const rows = useMemo(() => {
-    const list = team.players.filter((p) => {
+    const list = squadPlayers(team).filter((p) => {
       if (!matchesQuery(p.name, query)) return false;
       const tier = bestTier(team, p.id);
-      if (filter === 'starters') return tier === 0;
-      if (filter === 'subs') return tier === 1 || tier === 2;
-      if (filter === 'none') return tier === 3;
-      return true;
+      return filter.includes(tier === 0 ? 'starters' : tier === 3 ? 'none' : 'subs');
     });
     return list.sort((a, b) => {
       const byName = a.name.localeCompare(b.name);
@@ -76,6 +92,9 @@ export function SquadList({ phase, view, onAdd, onEdit, onPlace, onLoadExample }
             <button type="button" className="btn btn--primary" onClick={onAdd}>
               <Icon name="userPlus" /> {t('addPlayer')}
             </button>
+            <button type="button" className="btn btn--ghost" onClick={onAddTarget}>
+              <Icon name="star" /> {t('addTarget')}
+            </button>
             <button type="button" className="btn btn--ghost" onClick={onLoadExample}>{t('loadExample')}</button>
           </div>
         </div>
@@ -86,11 +105,17 @@ export function SquadList({ phase, view, onAdd, onEdit, onPlace, onLoadExample }
   return (
     <div className="squad">
       <div className="squad-toolbar">
-        <h2 className="squad-title">
-          {t('squad')} <span className="count">{team.players.length}</span>
-        </h2>
-        <button type="button" className="btn btn--primary" onClick={onAdd}>
-          <Icon name="userPlus" /> {t('addPlayer')}
+        <h2 className="sr-only">{t(list === 'squad' ? 'squad' : 'targets')}</h2>
+        <div className="segmented" role="radiogroup" aria-label={t('list')}>
+          {(['squad', 'targets'] as ListKind[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={list === k} className="seg" onClick={() => setList(k)}>
+              {k === 'targets' && <Icon name="star" size={14} />}
+              {t(k)} <span className="count">{k === 'squad' ? squad.length : targetCount}</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn btn--primary" onClick={list === 'squad' ? onAdd : onAddTarget}>
+          <Icon name="userPlus" /> {t(list === 'squad' ? 'addPlayer' : 'addTarget')}
         </button>
       </div>
       <div className="squad-filters">
@@ -98,19 +123,29 @@ export function SquadList({ phase, view, onAdd, onEdit, onPlace, onLoadExample }
           <Icon name="search" />
           <input className="input" type="search" value={query} placeholder={t('search')} aria-label={t('search')} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <div className="segmented" role="radiogroup" aria-label={t('status')}>
-          {(['all', 'starters', 'subs', 'none'] as Filter[]).map((f) => (
-            <button key={f} type="button" role="radio" aria-checked={filter === f} className="seg" onClick={() => setFilter(f)}>
-              {t(f === 'all' ? 'filterAll' : f === 'starters' ? 'filterStarters' : f === 'subs' ? 'filterSubs' : 'filterNone')}
+        {list === 'squad' && <div className="segmented" role="group" aria-label={t('status')}>
+          <button type="button" aria-pressed={showAll} className="seg" onClick={() => setFilter(STATUSES)}>{t('filterAll')}</button>
+          {STATUSES.map((st) => (
+            <button key={st} type="button" aria-pressed={!showAll && filter.includes(st)} className="seg" onClick={() => toggleStatus(st)}>
+              {t(STATUS_LABEL[st])}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
-      {rows.length === 0 ? (
+      {list === 'targets' ? (
+        <TargetList query={query} onAdd={onAddTarget} onEdit={onEdit} onPlace={onPlace} onSign={onSign} onClearQuery={() => setQuery('')} />
+      ) : squad.length === 0 ? (
+        <div className="empty empty--small">
+          <p className="muted">{t('emptySquadText')}</p>
+          <button type="button" className="btn btn--primary" onClick={onAdd}>
+            <Icon name="userPlus" /> {t('addPlayer')}
+          </button>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="empty empty--small">
           <p className="muted">{t('noMatches')}</p>
-          <button type="button" className="btn btn--ghost" onClick={() => { setQuery(''); setFilter('all'); }}>{t('clearFilters')}</button>
+          <button type="button" className="btn btn--ghost" onClick={() => { setQuery(''); setFilter(STATUSES); }}>{t('clearFilters')}</button>
         </div>
       ) : (
         <div className="table-wrap">
@@ -246,57 +281,6 @@ function Row({ player, locked, onEdit, onPlace, onRemove }: {
         </button>
       </td>
     </tr>
-  );
-}
-
-/** Copies the player's name to the clipboard; the icon shows a check (or the error) for a moment. */
-function CopyNameButton({ name }: { name: string }) {
-  const { t } = useI18n();
-  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
-
-  useEffect(() => {
-    if (status === 'idle') return;
-    const id = setTimeout(() => setStatus('idle'), 1500);
-    return () => clearTimeout(id);
-  }, [status]);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(name);
-      setStatus('copied');
-    } catch {
-      setStatus('failed');
-    }
-  };
-
-  const text = status === 'copied' ? t('nameCopied') : status === 'failed' ? t('copyFailed') : t('copyName');
-  return (
-    <button
-      type="button"
-      className={`icon-btn${status === 'copied' ? ' icon-btn--done' : status === 'failed' ? ' icon-btn--failed' : ''}`}
-      title={text}
-      aria-label={`${text}: ${name}`}
-      onClick={() => void copy()}
-    >
-      <Icon name={status === 'copied' ? 'check' : status === 'failed' ? 'x' : 'copy'} />
-    </button>
-  );
-}
-
-export function PosBadges({ map }: { map: PositionMap }) {
-  const { pos, posName, fam } = useI18n();
-  const codes = POS_CODES.filter((c) => map[c]).sort((a, b) => FAMILIARITY_RANK[map[a]!] - FAMILIARITY_RANK[map[b]!]);
-  if (!codes.length) return <span className="muted">—</span>;
-  return (
-    <span className="badges">
-      {codes.map((c) => (
-        <span key={c} className="pos-badge" data-group={POS_GROUP[c]} title={`${posName(c)} · ${fam(map[c]!)}`}>
-          <span className="fam-dot" data-fam={map[c]} aria-hidden="true" />
-          {pos(c)}
-          <span className="sr-only">, {fam(map[c]!)}</span>
-        </span>
-      ))}
-    </span>
   );
 }
 

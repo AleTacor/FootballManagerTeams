@@ -1,7 +1,7 @@
 import { emptyTeam, linkLineup } from '../domain/logic';
 import { FAMILIARITY_LEVELS, POS_CODES, SLOT_BY_ID, SLOTS } from '../domain/positions';
 import { roleFits } from '../domain/roles';
-import type { AppData, Assignment, Familiarity, Lang, Phase, Player, PositionMap, RoleMemory, Team } from '../domain/types';
+import type { AppData, Assignment, Familiarity, Lang, Phase, Player, PositionMap, RoleMemory, SlotId, TargetPlan, Team } from '../domain/types';
 
 export const STORAGE_KEY = 'fm-teams:v1';
 
@@ -16,7 +16,7 @@ function defaultLang(): Lang {
 export function defaultData(): AppData {
   const lang = defaultLang();
   const team = emptyTeam(lang === 'es' ? 'Mi equipo' : 'My team');
-  return { version: 2, settings: { lang }, teams: [team], activeTeamId: team.id };
+  return { version: 3, settings: { lang }, teams: [team], activeTeamId: team.id };
 }
 
 export function loadData(): AppData {
@@ -83,15 +83,27 @@ function parseRoles(v: unknown): RoleMemory | null {
   return Object.keys(out).length ? out : null;
 }
 
+const slotOrNull = (v: unknown): SlotId | null => (str(v) && v in SLOT_BY_ID ? (v as SlotId) : null);
+
+/** v3: transfer target plan, one slot per phase. A first draft stored one `slot` for both. */
+function parseTarget(v: unknown): TargetPlan | null {
+  if (!isObj(v)) return null;
+  if (isObj(v.slots)) return { slots: { ip: slotOrNull(v.slots.ip), oop: slotOrNull(v.slots.oop) } };
+  const slot = slotOrNull(v.slot);
+  return { slots: { ip: slot, oop: slot } };
+}
+
 function parsePlayer(v: unknown): Player | null {
   if (!isObj(v) || !str(v.id) || !str(v.name)) return null;
   const pos = isObj(v.positions) ? v.positions : {};
   const roles = parseRoles(v.roles);
+  const target = parseTarget(v.target);
   return {
     id: v.id,
     name: v.name.slice(0, 80),
     positions: { ip: parsePositions(pos.ip), oop: parsePositions(pos.oop) },
     ...(roles && { roles }),
+    ...(target && { target }),
   };
 }
 
@@ -138,7 +150,8 @@ function parseTeam(v: unknown): Team | null {
 }
 
 export function parseData(v: unknown): AppData | null {
-  if (!isObj(v) || (v.version !== 1 && v.version !== 2) || !Array.isArray(v.teams)) return null;
+  // v1 had no role memory and v2 no transfer targets; both still import.
+  if (!isObj(v) || (v.version !== 1 && v.version !== 2 && v.version !== 3) || !Array.isArray(v.teams)) return null;
   let teams = v.teams.map(parseTeam).filter((t): t is Team => !!t);
   if (v.version === 1) teams = teams.map(seedRoles);
   if (teams.length === 0) return null;
@@ -146,5 +159,5 @@ export function parseData(v: unknown): AppData | null {
   const lang: Lang = s.lang === 'en' || s.lang === 'es' ? s.lang : defaultLang();
   const activeTeamId = teams.some((t) => t.id === v.activeTeamId) ? (v.activeTeamId as string) : teams[0].id;
   // An old `theme` setting is ignored: the app only has the dark theme.
-  return { version: 2, settings: { lang }, teams, activeTeamId };
+  return { version: 3, settings: { lang }, teams, activeTeamId };
 }

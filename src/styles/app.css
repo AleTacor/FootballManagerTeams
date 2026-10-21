@@ -114,7 +114,7 @@ select.input { padding-right: var(--s6); }
   color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; white-space: nowrap;
 }
 .seg:hover { color: var(--text); }
-.seg[aria-checked="true"], .seg[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+.seg[aria-checked="true"], .seg[aria-selected="true"], .seg[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
 .segmented--sm .seg { min-height: 26px; padding: 0 var(--s2); font-size: var(--fs-xs); }
 
 .count {
@@ -301,6 +301,24 @@ select.input { padding-right: var(--s6); }
 @media (hover: none) { .remove-btn { opacity: 1; pointer-events: auto; } }
 .is-dragging .remove-btn, .pitch--targeting .remove-btn { opacity: 0; pointer-events: none; }
 
+/* Transfer targets planned for this slot: star + count, bottom-right of the disc (both views). */
+.target-pip {
+  position: absolute; top: calc(var(--token-size) - 14px); left: calc(50% + var(--token-size) / 2 - 10px);
+  display: inline-flex; align-items: center; gap: 1px;
+  height: 18px; padding: 0 4px; border-radius: 9px;
+  border: 2px solid var(--token-bg); background: var(--target); color: var(--target-text);
+  font-size: 10px; font-weight: 800; z-index: 2; pointer-events: none;
+}
+.slot--faded .target-pip { opacity: 1; }
+.target-chip { display: inline-flex; align-items: center; gap: 3px; color: var(--target); }
+.sign-options { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); margin-top: var(--s3); }
+.sign-option { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border: 1px solid var(--border); border-radius: var(--radius); }
+.sign-option h3 { font-size: var(--fs-md); font-weight: 600; }
+.sign-option ul { display: flex; flex-direction: column; gap: var(--s1); padding: 0; margin: 0; list-style: none; font-size: var(--fs-sm); color: var(--text-muted); }
+.sign-option .btn { margin-top: auto; }
+.sign-phase { display: flex; align-items: flex-start; gap: var(--s2); }
+@media (max-width: 520px) { .sign-options { grid-template-columns: 1fr; } }
+
 .popover {
   position: absolute; z-index: 10; width: 250px;
   padding: var(--s2); border-radius: var(--radius-lg);
@@ -325,6 +343,10 @@ select.input { padding-right: var(--s6); }
 .squad-filters .search { min-width: 200px; }
 
 .table-wrap {
+  /* Containing block for the rows' .sr-only texts (absolute): without it they're placed
+     relative to the page, escape this scroll box and stretch the page (Chromium), leaving
+     blank space below the pitch and the list once the squad is long. */
+  position: relative;
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--surface); overflow: auto;
   /* Fills the window, but never shorter than the pitch's minimum height on desktop. */

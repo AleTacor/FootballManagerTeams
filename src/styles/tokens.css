@@ -18,6 +18,10 @@
   --warning: #d4a72c;
   --warning-soft: rgb(212 167 44 / 0.16);
   --info: #4a9eda;
+  /* transfer targets (players you could sign): star marker on the pitch */
+  --target: #c79bf2;
+  --target-text: #1d1028;
+  --target-soft: rgb(199 155 242 / 0.16);
   --overlay: rgb(5 8 11 / 0.6);
   --shadow: 0 8px 28px rgb(0 0 0 / 0.45);
 

@@ -27,12 +27,26 @@ export type PositionMap = Partial<Record<PosCode, Familiarity>>;
 /** Last role a player had in each pitch slot, per phase (role id or `custom:<text>`). */
 export type RoleMemory = Partial<Record<Phase, Partial<Record<SlotId, string>>>>;
 
+/**
+ * A transfer target: a player who isn't in the squad yet. He never has lineup assignments;
+ * `slots` is where he's planned to play in each phase (null: not planned), and his planned
+ * role in each phase is his remembered role for that slot (`Player.roles`).
+ */
+export interface TargetPlan {
+  slots: Record<Phase, SlotId | null>;
+}
+
+/** How a signed target joins the lineup at his planned slot. */
+export type SignAs = 'starter' | 'sub';
+
 export interface Player {
   id: string;
   name: string;
   positions: Record<Phase, PositionMap>;
   /** Missing until the player is first placed with a role. */
   roles?: RoleMemory;
+  /** Present while the player is a transfer target (not yet in the squad). */
+  target?: TargetPlan;
 }
 
 /**
@@ -67,7 +81,7 @@ export interface Settings {
 }
 
 export interface AppData {
-  version: 2;
+  version: 3;
   settings: Settings;
   teams: Team[];
   activeTeamId: string;

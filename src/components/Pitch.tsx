@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { auxOf, familiarityAt, mainOf, removeAssignment, starterOf } from '../domain/logic';
+import { auxOf, familiarityAt, mainOf, removeAssignment, starterOf, targetPlayers } from '../domain/logic';
 import { POS_GROUP, SLOT_BY_ID, SLOTS, type SlotDef } from '../domain/positions';
 import { roleAbbr, roleName } from '../domain/roles';
 import type { Assignment, Phase, Player, SlotId, View } from '../domain/types';
@@ -106,6 +106,8 @@ function SlotNode({
   const player: Player | undefined = assignment ? team.players.find((p) => p.id === assignment!.playerId) : undefined;
   const fam = assignment ? familiarityAt(player, phase, slot.id) : null;
   const plusCount = view === 'subs' ? aux.length : 0;
+  // Transfer targets planned here in this phase (both views): a star pill, read out in the label.
+  const targetCount = targetPlayers(team).filter((p) => p.target?.slots[phase] === slot.id).length;
   const abbr = assignment ? roleAbbr(assignment.role, lang) : '';
   // In the subs view, the starter the shown sub replaces (his colour and surname under the token).
   const replaced = view === 'subs' && assignment?.replaces ? team.players.find((p) => p.id === assignment!.replaces) : undefined;
@@ -117,6 +119,7 @@ function SlotNode({
     assignment?.role ? roleName(assignment.role, lang) : '',
     replaced ? t('replacesName', { name: replaced.name }) : '',
     plusCount ? `+${plusCount} ${t('aux')}` : '',
+    targetCount ? t('targetsCount', { n: targetCount }) : '',
   ].filter(Boolean).join(', ');
 
   const hint = [posName(slot.pos), assignment?.role ? roleName(assignment.role, lang) : ''].filter(Boolean).join(' · ');
@@ -179,6 +182,12 @@ function SlotNode({
         >
           <Icon name="x" size={12} />
         </button>
+      )}
+      {targetCount > 0 && (
+        <span className="target-pip" aria-hidden="true" title={t('targetsCount', { n: targetCount })}>
+          <Icon name="star" size={10} />
+          {targetCount}
+        </span>
       )}
       {plusCount > 0 && (
         <button type="button" className="plus-btn" onClick={onPlus} aria-label={`${t('plusTitle')}: ${pos(slot.pos)}`}>
