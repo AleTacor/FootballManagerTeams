@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { copyTeam, emptyTeam } from '../domain/logic';
+import { deleteTeam } from '../domain/teams';
 import type { AppData, Lang } from '../domain/types';
 import { useI18n } from '../i18n/I18n';
 import { exportData, parseData } from '../state/storage';
@@ -90,7 +91,6 @@ export function Header({ onToast }: { onToast: (msg: string, kind?: 'ok' | 'erro
       {teamsOpen && (
         <TeamsModal
           onClose={() => setTeamsOpen(false)}
-          onToast={onToast}
           onImport={() => {
             setTeamsOpen(false);
             fileRef.current?.click();
@@ -102,8 +102,8 @@ export function Header({ onToast }: { onToast: (msg: string, kind?: 'ok' | 'erro
 }
 
 function TeamsModal({
-  onClose, onToast, onImport,
-}: { onClose: () => void; onToast: (m: string, k?: 'ok' | 'error') => void; onImport: () => void }) {
+  onClose, onImport,
+}: { onClose: () => void; onImport: () => void }) {
   const { data, setData } = useStore();
   const { t } = useI18n();
   const [toDelete, setToDelete] = useState<string | null>(null);
@@ -116,16 +116,18 @@ function TeamsModal({
     setData({ ...data, teams: data.teams.map((tm) => (tm.id === id ? { ...tm, name: clean } : tm)) });
   };
 
+  // The last team is cleared instead of deleted (deleteTeam).
+  const clears = data.teams.length === 1;
+
   if (toDelete) {
     const team = data.teams.find((x) => x.id === toDelete)!;
     return (
       <ConfirmDialog
-        message={t('deleteTeamConfirm', { name: team.name })}
-        confirmLabel={t('confirmDelete')}
+        message={clears ? t('clearTeamConfirm', { name: team.name }) : t('deleteTeamConfirm', { name: team.name })}
+        confirmLabel={clears ? t('confirmClear') : t('confirmDelete')}
         onCancel={() => setToDelete(null)}
         onConfirm={() => {
-          const teams = data.teams.filter((x) => x.id !== toDelete);
-          setData({ ...data, teams, activeTeamId: data.activeTeamId === toDelete ? teams[0].id : data.activeTeamId });
+          setData(deleteTeam(data, toDelete));
           setToDelete(null);
         }}
       />
@@ -164,8 +166,10 @@ function TeamsModal({
             <button
               type="button"
               className="icon-btn"
-              aria-label={`${t('delete')}: ${tm.name}`}
-              onClick={() => (data.teams.length > 1 ? setToDelete(tm.id) : onToast(t('lastTeam'), 'error'))}
+              aria-label={`${clears ? t('clearTeam') : t('delete')}: ${tm.name}`}
+              title={clears ? t('clearTeam') : t('delete')}
+              disabled={clears && !tm.players.length && !tm.assignments.length}
+              onClick={() => setToDelete(tm.id)}
             >
               <Icon name="trash" />
             </button>

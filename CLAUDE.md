@@ -4,7 +4,8 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-**FootballManagerTeams**: a React app to plan Football Manager 26 squads. Users store their
+**FootballManagerTeams**: a React app to plan Football Manager 26 and 27 squads (FM27 kept FM26's
+roles, so one catalogue serves both). Users store their
 players, the positions each one can play (separately for *in possession* and *out of
 possession*, with FM familiarity levels), and build lineups on a pitch: starters, main
 substitutes and auxiliary substitutes per position, each with an FM26 role.
@@ -48,7 +49,8 @@ and aborts the commit if any fails. `npm install` enables it (`prepare` sets
     the example squad) that checks the invariants after each step.
   - `domain/search.test.ts`: name search ignores case and accent marks (`matchesQuery`).
   - `domain/roles.test.ts`, `domain/positions.test.ts`: catalogue integrity (every position
-    has roles, abbreviations unique per position/phase, slot layout).
+    has roles, abbreviations unique per position/phase, slot layout), FM27 lists and names.
+  - `domain/teams.test.ts`: deleting teams (the last one is cleared instead).
   - `state/storage.test.ts`: import validation, localStorage load/save, corrupt or blocked storage.
   - `i18n/strings.test.ts`: `es` and `en` have the same keys and `{placeholders}`, and no empty texts.
   - `data/sample.test.ts`: the example squad obeys all rules and survives export/import.
@@ -56,7 +58,7 @@ and aborts the commit if any fails. `npm install` enables it (`prepare` sets
     marks drawn in the test).
   - `screenshot/detect.images.test.ts` (**`npm run test:images` only**): reads positions and
     name from real FM26 screenshots in `src/test/fixtures/` (ES/EN UI, 1080p/4K/small UI scale,
-    also resized to 0.6× and 1.5×), runs Tesseract (5 variants + vote) on the names, and checks
+    also resized to 0.6× and 1.5×) and FM27 ones (`fm27-*.png`: full screen and crops), runs Tesseract (5 variants + vote) on the names, and checks
     accents on synthetic names in `fixtures/accents/` (+ `names.json`).
   - **Images never go to the repository**: `src/test/fixtures/` and `ScreenShots/` are
     git-ignored. Expected results live in the test file; missing images are skipped. New
@@ -89,6 +91,7 @@ src/
     positions.ts   # 14 position codes, 24 pitch SLOTS (x/y %), familiarity order/rank
     roles.ts       # FM26 roles per position group and phase, ES/EN names + abbreviations
     logic.ts       # lineup rules: assignPlayer, moveAssignment, promoteToMain, removePlayer…, copyTeam (new ids)
+    teams.ts       # AppData-level team actions: deleteTeam (the last team is cleared, not deleted)
   state/
     store.tsx      # StoreProvider/useStore: data, updateTeam (records undo), setSettings, undo, redo
     storage.ts     # localStorage load/save, export, parseData (validates every import)
@@ -101,7 +104,7 @@ src/
     tokens.css     # design tokens (dark theme only)
     app.css        # component styles; uses tokens only
   screenshot/
-    detect.ts      # pure pixel reading of an FM26 profile: positions pitch dots, name above the Actions button
+    detect.ts      # pure pixel reading of an FM26/FM27 profile: positions pitch dots, name (findName)
     read.ts        # browser side: Blob → pixels, lazy Tesseract OCR of the name (bundled worker/core/data)
   data/sample.ts   # example squad of fictional players ("Load example squad")
   test/helpers.ts  # test builders and lineup invariant checker
@@ -129,7 +132,8 @@ src/
   remembered role there. `parseData` also reads a draft shape with one `slot` for both phases.
 - `AppData` = `{ version: 3, settings: {lang}, teams[], activeTeamId }`, stored under
   the `fm-teams:v1` key. v1 had no `Player.roles`; importing it seeds them from the assignments.
-  v2 had no transfer targets and imports unchanged.
+  v2 had no transfer targets and imports unchanged. A short-lived, unreleased v4 (teams tagged
+  FM26/FM27) imports as v3, dropping its auto-created empty FM27 teams.
   Older data may carry `settings.theme`: it's ignored (the app is dark-only).
 
 ### Lineup rules (enforced in `logic.ts`, not in components)
@@ -249,6 +253,17 @@ src/
   above/below each letter from a 120 px rendering, using Tesseract's letter boxes. Ø, Ł and the
   ogonek (ę) aren't recovered yet; the user fixes them in the editor. The dev server reloads the page
   once the first time `tesseract.js` is imported (dependency pre-bundling); that's expected.
+- **FM27 screenshots** draw the positions pitch exactly like FM26 (size, colours), but the header
+  differs: the Actions button is magenta and off to the right, and most crops leave it out.
+  `findName` detects the game itself: with FM26's purple Actions button it reads the name above
+  it, otherwise it uses `findNameAbovePitch` (FM27: about one pitch width above the pitch).
+  FM27 draws the acute accent as a thin, almost flat stroke; `slant()` reads its direction
+  from the faint pixels.
+- **FM27 roles** are FM26's: all lists in both phases were checked in the Spanish FM27 UI
+  (`ScreenShots/FM27Roles`, `FM27RolesOut`, git-ignored), Spanish names included. FM27 sorts the
+  list by the player's rating, so the order (default first) is FM26's. English names follow the
+  English FM27 UI where checked (`FM27Roles/English`): "Line-Holding Goalkeeper", "Half Back",
+  "Box-To-Box".
 - FM26 roles per position/phase and their Spanish names come from the Spanish game UI (role
   list screenshots of every position in `positions/`, git-ignored; role tooltips settled the
   ambiguous ones: central outlet = "central iniciador" / "de enlace" (Balance), splitting

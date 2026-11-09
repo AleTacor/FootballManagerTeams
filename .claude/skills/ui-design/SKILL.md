@@ -230,7 +230,7 @@ date, in warning colour when it is less than 12 months away. Format with the cur
 - **Navigation:** once there are more than two areas (Squad, Tactics, Transfers, Scouting,
   Settings), use a left sidebar on desktop and keep the bottom tab bar on phones. Always show
   where the user is.
-- **Import from screenshot (built):** the player editor's "Fill from screenshot" strip (paste,
+- **Import from screenshot (built):** FM26 or FM27 profiles (the game is detected from the image). The player editor's "Fill from screenshot" strip (paste,
   choose, drop; pasting an image on the main screen opens it) fills the normal editor, which is
   the review step. Status line: accent for success, warning for partial reads, danger for errors.
 - **(original note)** Show what was detected for review before saving, with the same

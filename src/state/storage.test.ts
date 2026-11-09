@@ -54,6 +54,20 @@ describe('parseData', () => {
     expect(parsed).toEqual(data);
   });
 
+  it('imports the unreleased v4 (teams per game) as v3, without its empty FM27 teams', () => {
+    const data = validData();
+    const raw = JSON.parse(JSON.stringify(data));
+    const fm26 = { ...raw.teams[0], game: 'fm26' };
+    const fm27Copy = { ...raw.teams[0], id: 'copy', game: 'fm27' };
+    const placeholder = { id: 'empty', name: 'My team', game: 'fm27', players: [], assignments: [] };
+    const parsed = parseData({ ...raw, version: 4, settings: { lang: 'es', game: 'fm27' }, teams: [fm26, placeholder, fm27Copy] })!;
+    expect(parsed.version).toBe(3);
+    expect(parsed.settings).toEqual({ lang: 'es' });
+    expect(parsed.teams.map((t) => t.id)).toEqual([data.teams[0].id, 'copy']);
+    expect(parsed.teams[0]).toEqual(data.teams[0]);
+    expect(parsed.teams[0]).not.toHaveProperty('game');
+  });
+
   it('keeps transfer targets, validates their plan and drops their assignments', () => {
     const parsed = parseData({
       version: 3,

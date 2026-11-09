@@ -153,9 +153,13 @@ function parseTeam(v: unknown): Team | null {
 }
 
 export function parseData(v: unknown): AppData | null {
-  // v1 had no role memory and v2 no transfer targets; both still import.
-  if (!isObj(v) || (v.version !== 1 && v.version !== 2 && v.version !== 3) || !Array.isArray(v.teams)) return null;
-  let teams = v.teams.map(parseTeam).filter((t): t is Team => !!t);
+  // v1 had no role memory and v2 no transfer targets; both still import. A short-lived v4 (never
+  // released) tagged teams with a game (FM26/FM27) and gave each game an empty team: its teams
+  // import as v3 teams, without the empty FM27 ones.
+  if (!isObj(v) || ![1, 2, 3, 4].includes(v.version as number) || !Array.isArray(v.teams)) return null;
+  let raw: unknown[] = v.teams;
+  if (v.version === 4) raw = raw.filter((t) => !(isObj(t) && t.game === 'fm27' && !(Array.isArray(t.players) && t.players.length)));
+  let teams = raw.map(parseTeam).filter((t): t is Team => !!t);
   if (v.version === 1) teams = teams.map(seedRoles);
   if (teams.length === 0) return null;
   const s = isObj(v.settings) ? v.settings : {};

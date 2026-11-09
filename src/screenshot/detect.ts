@@ -1,14 +1,18 @@
 import type { Familiarity, PosCode, PositionMap } from '../domain/types';
 
 /**
- * Reads an FM26 player profile screenshot: the positions pitch (familiarity dots) and the
- * area holding the player's name. Pure pixel work on RGBA data, no DOM, so it runs in tests.
+ * Reads an FM26 or FM27 player profile screenshot: the positions pitch (familiarity dots) and
+ * the area holding the player's name. Pure pixel work on RGBA data, no DOM, so it runs in tests.
  *
- * Measured on the default FM26 skin (see the fixtures in src/test/fixtures):
+ * Measured on the default skins (see the fixtures in src/test/fixtures):
  * - The positions pitch is horizontal (attack to the right), filled with rgb(13 68 57). Its
  *   14 dots sit on a fixed grid relative to the pitch box; the top row is the player's left.
- * - The purple "Actions" button rgb(110 15 215) sits under the name in the header. The name
- *   is the largest white text above it; the squad number badge after it varies by club.
+ *   FM27 draws it exactly like FM26, same size and dot colours.
+ * - FM26: the purple "Actions" button rgb(110 15 215) sits under the name in the header. The
+ *   name is the largest white text above it; the squad number badge after it varies by club.
+ * - FM27: the header is laid out differently (the Actions button is magenta and off to the
+ *   right, so crops often leave it out), but the name keeps its place relative to the pitch:
+ *   about one pitch width above it, starting a fifth of a pitch width right of its left edge.
  */
 export interface Rgba {
   width: number;
@@ -241,14 +245,42 @@ export function findActions(img: Rgba, pitch = findPitch(img)): Box | null {
 }
 
 /**
- * The name's box. Looks at the white text above the Actions button and picks the line with
+ * FM26: the name's box. Looks at the white text above the Actions button and picks the line with
  * the tallest letters, then keeps the words from its left edge until a gap wider than a word
  * space (which separates the name from the squad number badge or anything after it).
  */
 export function findNameBox(img: Rgba, actions = findActions(img)): Box | null {
   if (!actions) return null;
   const u = actions.h;
-  const area = clampBox(img, { x: actions.x - u * 0.3, y: actions.y - u * 5, w: u * 11.3, h: u * 4.8 });
+  return nameInArea(img, { x: actions.x - u * 0.3, y: actions.y - u * 5, w: u * 11.3, h: u * 4.8 }, u);
+}
+
+/**
+ * FM27: the name's box, searched in the header area above the positions pitch. The area
+ * starts right of the photo (whose bright rim would read as text) and ends above the
+ * "Positions" label; inside it the name is the line with the tallest letters (the position
+ * and nationality lines under it are smaller).
+ */
+export function findNameAbovePitch(img: Rgba, pitch = findPitch(img)): Box | null {
+  if (!pitch) return null;
+  const pw = pitch.w;
+  // Measured on 222 px pitches: name at x +45, cap top −230; "Positions" label at −53.
+  return nameInArea(img, { x: pitch.x + pw * 0.12, y: pitch.y - pw * 1.3, w: pw * 2.6, h: pw * 0.85 }, pw * 0.14);
+}
+
+/**
+ * The name's box in an FM26 or FM27 profile screenshot. FM26 has the purple Actions button
+ * under the name; FM27 doesn't (its button is magenta), so without one the name is looked for
+ * above the pitch, where FM27 puts it.
+ */
+export function findName(img: Rgba, pitch = findPitch(img)): Box | null {
+  const actions = findActions(img, pitch);
+  return actions ? findNameBox(img, actions) : findNameAbovePitch(img, pitch);
+}
+
+/** The name in a search area: `u` is about the name's letter height (a bit more). */
+function nameInArea(img: Rgba, searchArea: Box, u: number): Box | null {
+  const area = clampBox(img, searchArea);
   if (!area.w || !area.h) return null;
   // Letters: white blobs of text size (drops box borders and dots).
   const glyphs = blobs(img, area, (p) => isWhite(p, 200)).filter((b) => b.h >= u * 0.15 && b.h <= u * 1.5 && b.w <= b.h * 3 + 2);
@@ -483,6 +515,33 @@ function classifyMarkAbove(m: Box, dark: (x: number, y: number) => boolean): key
 }
 
 /**
+ * Which way a flat mark leans, counting faint pixels too: FM27 draws the acute as a thin,
+ * almost flat stroke whose dark core alone has no slant (its faint ends come out as separate
+ * specks). Compares the ink-weighted height of the left and right thirds of the area around
+ * the mark, kept within the letter's columns and above its body (lower on the left = acute).
+ */
+function slant(img: Rgba, m: Box, letter: { x0: number; x1: number; top: number }): 'acute' | 'grave' | null {
+  const x0 = Math.max(0, letter.x0, m.x - Math.round(m.w * 0.6));
+  const x1 = Math.min(img.width, letter.x1, m.x + m.w + Math.round(m.w * 0.6));
+  const y0 = Math.max(0, m.y - m.h * 2), y1 = Math.min(img.height, letter.top);
+  const height = (from: number, to: number) => {
+    let sum = 0, n = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = from; x < to; x++) {
+        const k = Math.max(0, 240 - img.data[(y * img.width + x) * 4]);
+        sum += k * y;
+        n += k;
+      }
+    }
+    return n ? sum / n : null;
+  };
+  const w = (x1 - x0) / 3;
+  const left = height(x0, Math.round(x0 + w)), right = height(Math.round(x1 - w), x1);
+  if (left === null || right === null) return null;
+  return left - right > m.h * 0.25 ? 'acute' : right - left > m.h * 0.25 ? 'grave' : null;
+}
+
+/**
  * Re-reads accents from the pixels of the image Tesseract read (dark text on white).
  * Letter bodies and the small marks above or below them are separate ink blobs; each mark
  * goes to the letter it sits over, and its shape gives the accent. A combination is kept only
@@ -560,7 +619,8 @@ export function restoreAccents(img: Rgba, words: { symbols: OcrSymbol[] }[]): st
     } else if (up.length) {
       const x0 = Math.min(...up.map((m) => m.x)), y0 = Math.min(...up.map((m) => m.y));
       const x1 = Math.max(...up.map((m) => m.x + m.w)), y1 = Math.max(...up.map((m) => m.y + m.h));
-      mark = classifyMarkAbove({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, dark);
+      const box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      mark = classifyMarkAbove(box, dark) ?? slant(img, box, { x0: s.bbox.x0, x1: s.bbox.x1, top: bodyTop[i]!.top });
     }
     // Which marks a letter can carry in names: a single dot only on ż and İ (on other vowels it's
     // a ¨ whose dots merged).

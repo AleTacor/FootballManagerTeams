@@ -1,11 +1,13 @@
 import type { Lang, Phase, PosCode } from './types';
 
 /**
- * FM26 roles. In FM26 every tactic slot has an In Possession role and an
+ * FM26 and FM27 roles (FM27 kept FM26's roles: same lists per position and phase, same names).
+ * Since FM26 every tactic slot has an In Possession role and an
  * Out of Possession role. The roles per position and phase and their Spanish names
  * come from the Spanish game UI (role lists of every position, both phases; the role
  * tooltips confirm which name is which where the names alone were ambiguous).
- * Spanish abbreviations are ours.
+ * Spanish abbreviations are ours. English names follow the English FM27 UI where checked
+ * (GK out of possession, DM in possession).
  */
 interface RoleDef {
   en: string;
@@ -18,7 +20,7 @@ export const ROLES: Record<string, RoleDef> = {
   gk: { en: 'Goalkeeper', enAbbr: 'GK', es: 'Portero', esAbbr: 'POR' },
   bpgk: { en: 'Ball-Playing Goalkeeper', enAbbr: 'BPGK', es: 'Portero con juego de pies', esAbbr: 'PJP' },
   nngk: { en: 'No-Nonsense Goalkeeper', enAbbr: 'NNGK', es: 'Portero sin complicaciones', esAbbr: 'PSC' },
-  lhk: { en: 'Line-Holding Keeper', enAbbr: 'LHK', es: 'Portero de línea de gol', esAbbr: 'PLG' },
+  lhk: { en: 'Line-Holding Goalkeeper', enAbbr: 'LHK', es: 'Portero de línea de gol', esAbbr: 'PLG' },
   sk: { en: 'Sweeper Keeper', enAbbr: 'SK', es: 'Portero cierre', esAbbr: 'PCI' },
 
   cb: { en: 'Centre-Back', enAbbr: 'CB', es: 'Central', esAbbr: 'DFC' },
@@ -45,9 +47,9 @@ export const ROLES: Record<string, RoleDef> = {
 
   dm: { en: 'Defensive Midfielder', enAbbr: 'DM', es: 'Mediocentro', esAbbr: 'MCD' },
   dlp: { en: 'Deep-Lying Playmaker', enAbbr: 'DLP', es: 'Pivote organizador', esAbbr: 'PO' },
-  hb: { en: 'Half-Back', enAbbr: 'HB', es: 'Medio cierre', esAbbr: 'MCI' },
-  b2b: { en: 'Box-to-Box Midfielder', enAbbr: 'BBM', es: 'Centrocampista todoterreno', esAbbr: 'CTT' },
-  b2bp: { en: 'Box-to-Box Playmaker', enAbbr: 'BBP', es: 'Organizador todoterreno', esAbbr: 'OTT' },
+  hb: { en: 'Half Back', enAbbr: 'HB', es: 'Medio cierre', esAbbr: 'MCI' },
+  b2b: { en: 'Box-To-Box Midfielder', enAbbr: 'BBM', es: 'Centrocampista todoterreno', esAbbr: 'CTT' },
+  b2bp: { en: 'Box-To-Box Playmaker', enAbbr: 'BBP', es: 'Organizador todoterreno', esAbbr: 'OTT' },
   ddm: { en: 'Dropping Defensive Midfielder', enAbbr: 'DDM', es: 'Mediocentro retrasado', esAbbr: 'MRE' },
   sdm: { en: 'Screening Defensive Midfielder', enAbbr: 'SDM', es: 'Mediocentro de contención', esAbbr: 'MCO' },
   wcdm: { en: 'Wide Covering Defensive Midfielder', enAbbr: 'WCDM', es: 'Mediocentro de amplia cobertura', esAbbr: 'MAC' },

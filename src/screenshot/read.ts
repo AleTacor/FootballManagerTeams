@@ -1,11 +1,11 @@
 import type { PositionMap } from '../domain/types';
-import { findActions, findNameBox, findPitch, NAME_VARIANTS, nameImage, readName, readPositions, type OcrRead, type Rgba } from './detect';
+import { findName, findPitch, NAME_VARIANTS, nameImage, readName, readPositions, type OcrRead, type Rgba } from './detect';
 import workerUrl from 'tesseract.js/dist/worker.min.js?url';
 import coreUrl from 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js?url';
 
 export interface ScreenshotResult {
   name: string | null;
-  /** Same map for both phases: FM26 positions don't depend on the phase, only roles do. */
+  /** Same map for both phases: FM positions don't depend on the phase, only roles do. */
   positions: PositionMap | null;
 }
 
@@ -54,12 +54,12 @@ function toCanvas(img: Rgba): HTMLCanvasElement {
   return canvas;
 }
 
-/** Reads the player's name and positions from an FM26 profile screenshot. */
+/** Reads the player's name and positions from an FM26 or FM27 profile screenshot. */
 export async function readScreenshot(blob: Blob): Promise<ScreenshotResult> {
   const img = await loadImage(blob);
   const pitch = findPitch(img);
   const positions = readPositions(img, pitch);
-  const box = findNameBox(img, findActions(img, pitch));
+  const box = findName(img, pitch);
   let name: string | null = null;
   if (box) {
     const w = await getWorker();
